@@ -177,10 +177,101 @@ public sealed class ContributionResolverTests
         });
     }
 
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(false, 1)]
+    [InlineData(false, 2)]
+    [InlineData(true, 0)]
+    [InlineData(true, 1)]
+    [InlineData(true, 2)]
+    public void Queries_ReportUnavailableMetadataBeforeCountingMatches(bool exclusiveClaim, int matchCount)
+    {
+        var unavailable = new LockContribution
+        {
+            Metadata = ContributionMetadata.Unavailable("Incomplete saved identity.")
+        };
+        var unattributed = new LockContribution();
+        var matching = Enumerable.Range(0, matchCount).Select(_ => new LockContribution(LockId)).ToArray();
+        foreach (var contribution in matching)
+            contribution.Metadata.ClaimExclusiveResponsibility("example/property");
+        var candidates = new List<LockContribution> { unavailable, unattributed };
+        candidates.AddRange(matching);
+
+        foreach (bool reverse in new[] { false, true })
+        {
+            if (reverse) candidates.Reverse();
+            var result = exclusiveClaim
+                ? ContributionResolver.ResolveExclusiveClaim(candidates, "example/property")
+                : ContributionResolver.Resolve(candidates, LockId);
+
+            Assert.Equal(ContributionLookupStatus.InvalidMetadata, result.Status);
+            Assert.Same(unavailable, Assert.Single(result.InvalidCandidates));
+            Assert.Equal(matchCount, result.Matches.Count);
+            foreach (var contribution in matching) Assert.Contains(contribution, result.Matches);
+            Assert.DoesNotContain(unattributed, result.Matches);
+            Assert.Null(unattributed.Metadata.LoadError);
+            Assert.Equal("Incomplete saved identity.", unavailable.Metadata.LoadError);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Queries_SnapshotUnavailableCandidatesAcrossConsumerTypesInOneEnumeration(bool exclusiveClaim)
+    {
+        var valid = new LockContribution(LockId);
+        valid.Metadata.ClaimExclusiveResponsibility("example/property");
+        var unavailableLock = new LockContribution
+        {
+            Metadata = ContributionMetadata.Unavailable("Invalid saved lock metadata.")
+        };
+        var unavailableActivity = new ActivityContribution
+        {
+            Metadata = ContributionMetadata.Unavailable("Unsupported activity metadata version.")
+        };
+        var storage = new List<IContribution> { unavailableActivity, valid, unavailableLock };
+        int enumerations = 0;
+        IEnumerable<IContribution> Candidates()
+        {
+            enumerations++;
+            foreach (var candidate in storage) yield return candidate;
+        }
+
+        var result = exclusiveClaim
+            ? ContributionResolver.ResolveExclusiveClaim(Candidates(), "example/property")
+            : ContributionResolver.Resolve(Candidates(), LockId);
+        storage.Clear();
+
+        Assert.Equal(1, enumerations);
+        Assert.Equal(ContributionLookupStatus.InvalidMetadata, result.Status);
+        Assert.Same(valid, Assert.Single(result.Matches));
+        Assert.Equal(new IContribution[] { unavailableActivity, unavailableLock }, result.InvalidCandidates);
+        Assert.Throws<NotSupportedException>(() => ((IList<IContribution>)result.InvalidCandidates).Clear());
+        Assert.Throws<NotSupportedException>(() => ((IList<IContribution>)result.Matches).Clear());
+    }
+
+    [Fact]
+    public void Resolve_UnavailableMetadataOnlyAffectsTheSuppliedScope()
+    {
+        var valid = new LockContribution(LockId);
+        var unavailable = new LockContribution
+        {
+            Metadata = ContributionMetadata.Unavailable("Invalid saved metadata.")
+        };
+
+        var affected = ContributionResolver.Resolve(new[] { unavailable }, LockId);
+        var unaffected = ContributionResolver.Resolve(new[] { valid }, LockId);
+
+        Assert.Equal(ContributionLookupStatus.InvalidMetadata, affected.Status);
+        Assert.Equal(ContributionLookupStatus.Found, unaffected.Status);
+        Assert.Empty(unaffected.InvalidCandidates);
+        Assert.Same(valid, Assert.Single(unaffected.Matches));
+    }
+
     // These are provider-owned records, not implementations of native locking or activities.
     private sealed class LockContribution : IContribution
     {
-        public ContributionMetadata Metadata { get; } = new();
+        public ContributionMetadata Metadata { get; init; } = new();
 
         public LockContribution(ContributionId? identity = null)
         {
@@ -190,7 +281,7 @@ public sealed class ContributionResolverTests
 
     private sealed class ActivityContribution : IContribution
     {
-        public ContributionMetadata Metadata { get; } = new();
+        public ContributionMetadata Metadata { get; init; } = new();
     }
 
     private sealed class InvalidContribution : IContribution

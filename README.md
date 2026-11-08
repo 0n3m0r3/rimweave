@@ -2,7 +2,7 @@
 
 An experimental framework for interoperable RimWorld mods. Gameplay rules and content belong to separate extensions.
 
-The current prototype provides diagnostic logging, passive body inspection, guarded native health-effect removal, and shared contribution attribution and resolution. A health adapter selects exact pawn/body-part scopes and keeps cooperating effects independent. Gameplay arbitration and general transformation systems remain outside these contracts.
+The current prototype provides diagnostic logging, passive body inspection, guarded native health-effect removal, and shared contribution attribution and resolution. A health adapter selects exact pawn/body-part scopes, keeps cooperating effects independent, and persists their metadata through native save/load. Gameplay arbitration and general transformation systems remain outside these contracts.
 
 ## Requirements
 
@@ -38,7 +38,7 @@ Unit tests cover log formatting, shared attribution and resolution with differen
 
 ## Contribution boundaries
 
-`RimWeave.Contributions` contains the shared identity, attribution and resolution rules. Providers expose metadata through `IContribution` and supply candidates from their authoritative storage. `ContributionResolver` returns a typed, read-only snapshot and reports missing, unique or ambiguous matches. Exclusive claims are explicit; the framework does not choose a winner or treat ordinary observers as competing owners.
+`RimWeave.Contributions` contains the shared identity, attribution and resolution rules. Providers expose metadata through `IContribution` and supply candidates from their authoritative storage. `ContributionResolver` returns a typed, read-only snapshot and reports missing, unique or ambiguous matches, or unavailable saved metadata. Exclusive claims are explicit; the framework does not choose a winner or treat ordinary observers as competing owners.
 
 `RimWeave.Health` selects candidates from the native health list for one pawn and exact body-part reference; a null part means whole-body effects only. `ContributionHediff` composes the shared metadata and opts out of native merging. The framework keeps no duplicate registry of health effects. Other adapters can reuse the same contracts while retaining their own storage, targeting and lifecycle rules.
 
@@ -48,7 +48,19 @@ Unit tests cover log formatting, shared attribution and resolution with differen
 
 Origin metadata does not assign ownership, attach an effect, alter its target or imply a lifetime, expiry, reversibility or gameplay rule. Equipment, surgery, injury and other effects are examples, not a closed vocabulary. Source resolution and disappearance remain the provider's responsibility. Native information or an explicit adapter may supply external provenance; merely observing an effect does not reveal its cause.
 
-Contribution metadata is experimental and is not persisted yet. No new effect or developer command is activated by these APIs alone. Native save/load, object stack changes and additional adapters require their own integration work and validation.
+Contribution metadata remains experimental. No new effect or developer command is activated by these APIs alone. Object stack changes and additional native adapters require their own integration work and validation.
+
+## Contribution persistence
+
+`ContributionHediff` saves its shared metadata through the native Scribe lifecycle. The native health system remains responsible for the effect, pawn, body part and health state. Restoring metadata does not add or remove an effect, resolve a source or replay its original command. Extensions overriding `ExposeData` must call the base implementation in every native save/load phase. The supported initial scope is an unchanged game, framework and provider configuration with the required classes and definitions still available.
+
+The metadata node uses format version `1` and explicit `utf16le-base64` string encoding. This preserves exact .NET string values, including carriage returns and characters that XML cannot represent directly. Identity, exclusive responsibility, origin type and optional source are restored together; custom origin types do not require registration. An absent origin remains distinct from an explicit `Unknown`. An older save without a metadata node remains unattributed: values that were never saved cannot be recovered. Empty metadata adds no node. `ContributionMetadataScribe` provides the same persistence contract to another owner that explicitly calls it from its own `ExposeData`; implementing `IContribution` alone does not opt an object into persistence. Metadata is replaced during `LoadingVars`, so consumers must read it from the restored owner rather than retain a pre-load metadata object. Native components may consume the restored metadata during `PostLoadInit`, after the value-loading phase has completed.
+
+Malformed or unsupported metadata leaves the native effect intact, sets `Metadata.LoadError`, and makes the entire metadata set unavailable. Attribution mutations are refused. The health adapter logs the affected definition and native effect ID after loading; the original metadata XML is retained as opaque text in subsequent saves. It is not silently discarded, interpreted as empty metadata or automatically repaired. This does not recover a malformed save file or missing third-party classes, provide a general migration service, or guarantee removal and reinstallation of a provider.
+
+If a queried scope contains unavailable metadata, its result is `InvalidMetadata`, even when another candidate matches. `Matches` retains the valid matches and `InvalidCandidates` identifies the unreadable candidates; no unique result can be established from incomplete attribution. Removal by identity therefore does nothing in that scope. The list-only `ContributionQueries.Find` throws `InvalidOperationException` for this case; use `Resolve` to inspect the incomplete result. A different pawn or body-part scope remains independent. The explicit exact-instance removal API is still available to a caller that owns the cleanup decision.
+
+Native Scribe tests exercise metadata and health-state round trips independently of a running colony. Full-colony loading, third-party callbacks and provider-specific activity resumption require separate in-game validation. This contract supplies neither an activity restart policy nor transaction recovery for external effects.
 
 ## Developer documentation
 
@@ -107,7 +119,7 @@ The API does not intercept direct native calls, maintain a second health-state r
 
 ### Removal by contribution identity
 
-`RimWeave.Health.ContributionOperations.Remove(pawn, contribution, part)` resolves an identity on one pawn and exact body-part reference, then delegates a unique match to the guarded instance-removal API above. A null part means whole-body effects only. Missing or ambiguous matches trigger no native removal or removal callbacks from this call.
+`RimWeave.Health.ContributionOperations.Remove(pawn, contribution, part)` resolves an identity on one pawn and exact body-part reference, then delegates a unique match to the guarded instance-removal API above. A null part means whole-body effects only. Missing or ambiguous matches, or unreadable metadata in that scope, trigger no native removal or removal callbacks from this call.
 
 The result retains `Lookup`, the candidates observed before removal, and a nullable `Removal` outcome. A null `Removal` means no unique candidate was resolved. A non-null `Removal` still requires inspecting its status: finding one candidate does not guarantee its removal. An exclusive-claim conflict does not prevent removing a uniquely identified contribution, which may be how an extension resolves that conflict. Attribution is not an authorization boundary; native exceptions and partial side effects retain the existing semantics.
 

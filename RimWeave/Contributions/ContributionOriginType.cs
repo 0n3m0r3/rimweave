@@ -11,9 +11,15 @@ public sealed record ContributionOriginType
     /// <summary>An explicit declaration that the cause is unknown.</summary>
     public static ContributionOriginType Unknown { get; } = new("rimweave.framework", "unknown");
 
+    /// <summary>The vocabulary namespace, normalized to invariant lowercase.</summary>
     public string NamespaceId { get; }
+    /// <summary>The case-sensitive type name within that vocabulary.</summary>
     public string LocalId { get; }
 
+    /// <summary>Defines or refers to a cause identifier without a central registration step.</summary>
+    /// <param name="namespaceId">A nonblank vocabulary namespace with no surrounding whitespace.</param>
+    /// <param name="localId">A nonblank local name with no surrounding whitespace.</param>
+    /// <exception cref="ArgumentException">An identifier is null, blank or has surrounding whitespace.</exception>
     public ContributionOriginType(string namespaceId, string localId)
     {
         NamespaceId = IdentifierRules.NormalizeNamespace(namespaceId, nameof(namespaceId));

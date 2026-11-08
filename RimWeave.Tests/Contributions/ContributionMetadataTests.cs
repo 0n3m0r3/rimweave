@@ -11,6 +11,26 @@ public sealed class ContributionMetadataTests
         var metadata = new ContributionMetadata();
         Assert.Null(metadata.Identity);
         Assert.Null(metadata.ExclusiveResponsibility);
+        Assert.Null(metadata.Origin);
+        Assert.Null(metadata.LoadError);
+    }
+
+    [Fact]
+    public void UnavailableMetadata_PreservesItsErrorAndRejectsInventedAttribution()
+    {
+        var metadata = ContributionMetadata.Unavailable("Unsupported metadata version.");
+
+        Assert.Throws<InvalidOperationException>(() =>
+            metadata.AssignIdentity(new ContributionId("example.mod", "first")));
+        Assert.Throws<InvalidOperationException>(() =>
+            metadata.ClaimExclusiveResponsibility("example/property"));
+        Assert.Throws<InvalidOperationException>(() =>
+            metadata.DescribeOrigin(new ContributionOrigin(ContributionOriginType.Unknown)));
+
+        Assert.Equal("Unsupported metadata version.", metadata.LoadError);
+        Assert.Null(metadata.Identity);
+        Assert.Null(metadata.ExclusiveResponsibility);
+        Assert.Null(metadata.Origin);
     }
 
     [Fact]

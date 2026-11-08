@@ -10,9 +10,16 @@ namespace RimWeave.Contributions;
 /// </remarks>
 public sealed record ContributionOrigin
 {
+    /// <summary>The cause identifier, retained even when the framework does not interpret its meaning.</summary>
     public ContributionOriginType Type { get; }
+    /// <summary>An optional provider-defined source reference, preserved verbatim and never resolved here.</summary>
     public string? SourceReference { get; }
 
+    /// <summary>Creates an origin description without changing a contribution or a source object.</summary>
+    /// <param name="type">A declared cause, including an explicit Unknown when appropriate.</param>
+    /// <param name="sourceReference">An optional nonblank reference with no surrounding whitespace.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="type"/> is null.</exception>
+    /// <exception cref="ArgumentException">A supplied source reference is blank or has surrounding whitespace.</exception>
     public ContributionOrigin(ContributionOriginType type, string? sourceReference = null)
     {
         ArgumentNullException.ThrowIfNull(type);

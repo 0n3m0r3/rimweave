@@ -2,6 +2,7 @@ using Verse;
 
 namespace RimWeave.Health;
 
+/// <summary>Guards native health-effect removal against stale instances and mismatched owners.</summary>
 public static class HediffOperations
 {
     /// <summary>
@@ -12,6 +13,10 @@ public static class HediffOperations
     /// requested pawn after a normal return; it does not describe all side effects.
     /// Native exceptions propagate and may follow partial changes.
     /// </remarks>
+    /// <param name="pawn">The requested owner with an initialized native health tracker.</param>
+    /// <param name="hediff">The exact native effect instance, including an ordinary non-RimWeave Hediff.</param>
+    /// <returns>An observed attachment outcome; inspect Status rather than assuming success.</returns>
+    /// <exception cref="ArgumentNullException">The pawn or effect is null.</exception>
     public static HediffRemovalResult Remove(Pawn pawn, Hediff hediff)
     {
         ArgumentNullException.ThrowIfNull(pawn);
