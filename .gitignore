@@ -1,0 +1,26 @@
+# Local agent context and configuration
+AGENTS.md
+AGENTS.override.md
+.agents/
+.codex/
+
+# Personal configuration and local secrets
+/RimWeave.local.props
+.aws/
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Local Rider files
+.idea/
+*.DotSettings.user
+*.csproj.user
+
+# .NET and mod build outputs
+[Bb]in/
+[Oo]bj/
+/mod/Assemblies/
+
+# Example mod build outputs
+/examples/RimWeave.Example/Assemblies/
