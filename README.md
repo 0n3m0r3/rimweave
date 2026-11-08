@@ -34,7 +34,7 @@ dotnet test RimWeave.sln --configuration Release
 
 Debug and Release currently share each mod's output directory. The last build determines which configuration is installed when copying that directory.
 
-Unit tests cover log formatting. Native health callbacks and game integration require separate in-game validation.
+Unit tests cover log formatting and health-removal guards: null arguments, absent instances, and pawn mismatches. The shared `HealthTestPawns.CreateForGuardChecks` helper creates fresh minimal native objects for paths that must stop before native mutation. Successful native removal, callback side effects, and game integration require separate in-game validation.
 
 ## Layout
 

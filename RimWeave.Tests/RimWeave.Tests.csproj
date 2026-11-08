@@ -1,4 +1,5 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+    <Import Project="../RimWeave.local.props" />
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <OutputType>Exe</OutputType>
@@ -6,7 +7,7 @@
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
         <IsTestProject>true</IsTestProject>
-        <RootNamespace>RimWeave.Test</RootNamespace>
+        <RootNamespace>RimWeave.Tests</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
@@ -20,4 +21,20 @@
     <ItemGroup>
         <ProjectReference Include="../RimWeave/RimWeave.csproj" />
     </ItemGroup>
+
+    <ItemGroup>
+        <Reference Include="Assembly-CSharp">
+            <HintPath>$(RimWorldDir)/Assembly-CSharp.dll</HintPath>
+            <Private>true</Private>
+        </Reference>
+        <Reference Include="UnityStubs">
+            <HintPath>$(RimWorldDir)/UnityStubs.dll</HintPath>
+            <Private>true</Private>
+        </Reference>
+        <Reference Include="Waylith">
+            <HintPath>$(RimWorldDir)/Waylith.dll</HintPath>
+            <Private>true</Private>
+        </Reference>
+    </ItemGroup>
+
 </Project>
