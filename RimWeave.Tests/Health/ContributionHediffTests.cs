@@ -1,5 +1,6 @@
 using RimWeave.Contributions;
 using RimWeave.Health;
+using RimWeave.Tests.Helpers;
 using Verse;
 using Xunit;
 
@@ -27,6 +28,30 @@ public sealed class ContributionHediffTests
         Assert.NotSame(first.Metadata, second.Metadata);
         Assert.Null(second.Metadata.Identity);
         Assert.Null(second.Metadata.ExclusiveResponsibility);
+    }
+
+    [Fact]
+    public void DescribingAnOrigin_PreservesNativeStateAndUsesTheSharedMetadata()
+    {
+        var pawn = HealthTestPawns.CreateForGuardChecks();
+        var part = new BodyPartRecord();
+        var effect = new ContributionHediff { pawn = pawn, Part = part, ageTicks = 12 };
+        var identity = new ContributionId("example.mod", "equipment-effect");
+        effect.Metadata.AssignIdentity(identity);
+        effect.Metadata.ClaimExclusiveResponsibility("example/property");
+        var origin = new ContributionOrigin(
+            new ContributionOriginType("example.equipment", "equipped"), "example.equipment:item/42");
+
+        IContribution contribution = effect;
+        contribution.Metadata.DescribeOrigin(origin);
+
+        Assert.Same(origin, effect.Metadata.Origin);
+        Assert.Same(identity, effect.Metadata.Identity);
+        Assert.Equal("example/property", effect.Metadata.ExclusiveResponsibility);
+        Assert.Same(pawn, effect.pawn);
+        Assert.Same(part, effect.Part);
+        Assert.Equal(12, effect.ageTicks);
+        Assert.Empty(pawn.health.hediffSet.hediffs);
     }
 
     [Fact]

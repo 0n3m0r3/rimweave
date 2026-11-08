@@ -1,6 +1,6 @@
 namespace RimWeave.Contributions;
 
-/// <summary>Attribution rules shared by contributions with different native owners.</summary>
+/// <summary>Attribution and provenance shared by contributions with different native owners.</summary>
 /// <remarks>
 /// Metadata does not register, attach, serialize or apply a contribution.
 /// Missing attribution remains unknown. The containing owner controls its lifetime.
@@ -10,6 +10,7 @@ public sealed class ContributionMetadata
 {
     public ContributionId? Identity { get; private set; }
     public string? ExclusiveResponsibility { get; private set; }
+    public ContributionOrigin? Origin { get; private set; }
 
     public void AssignIdentity(ContributionId identity)
     {
@@ -28,6 +29,16 @@ public sealed class ContributionMetadata
             throw new InvalidOperationException("An exclusive responsibility cannot be reassigned.");
 
         ExclusiveResponsibility = responsibility;
+    }
+
+    /// <summary>Records a declared origin without applying an effect or making it reversible.</summary>
+    public void DescribeOrigin(ContributionOrigin origin)
+    {
+        ArgumentNullException.ThrowIfNull(origin);
+        if (Origin is not null && Origin != origin)
+            throw new InvalidOperationException("A declared origin cannot be reassigned.");
+
+        Origin = origin;
     }
 
     internal static void ValidateResponsibility(string responsibility)

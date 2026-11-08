@@ -42,6 +42,12 @@ Unit tests cover log formatting, shared attribution and resolution with differen
 
 `RimWeave.Health` selects candidates from the native health list for one pawn and exact body-part reference; a null part means whole-body effects only. `ContributionHediff` composes the shared metadata and opts out of native merging. The framework keeps no duplicate registry of health effects. Other adapters can reuse the same contracts while retaining their own storage, targeting and lifecycle rules.
 
+`ContributionMetadata.Origin` separately describes the provider-declared cause of a contribution. Its `Type` is a `ContributionOriginType`, an extensible value identified by `NamespaceId` and `LocalId`. Any provider can define a type without registration or a RimWeave update. For example, `new ContributionOriginType("example.combat", "impact")` is distinct from the same local key in another namespace. Namespaces are normalized invariantly to lowercase; local keys remain case-sensitive, using the same identifier rules as contribution identities. The type's namespace identifies its vocabulary, not the contribution's owner or the owner of its source.
+
+`SourceReference` is optional, opaque and case-sensitive. Its format and interpretation belong to the declaring provider's contract; it may identify a native object, an external event or another contribution. RimWeave neither resolves it nor copies its source object. An undeclared origin remains null; `ContributionOriginType.Unknown` explicitly declares that the cause is unknown. A custom type unfamiliar to RimWeave remains that exact type and is never replaced with `Unknown`. `DescribeOrigin` accepts repeated equal values and rejects replacing an existing origin with a different one.
+
+Origin metadata does not assign ownership, attach an effect, alter its target or imply a lifetime, expiry, reversibility or gameplay rule. Equipment, surgery, injury and other effects are examples, not a closed vocabulary. Source resolution and disappearance remain the provider's responsibility. Native information or an explicit adapter may supply external provenance; merely observing an effect does not reveal its cause.
+
 Contribution metadata is experimental and is not persisted yet. No new effect or developer command is activated by these APIs alone. Native save/load, object stack changes and additional adapters require their own integration work and validation.
 
 ## Developer documentation
