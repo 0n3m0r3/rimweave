@@ -2,7 +2,7 @@
 
 An experimental framework for interoperable RimWorld mods. Gameplay rules and content belong to separate extensions.
 
-The current prototype provides diagnostic logging, passive body inspection, guarded removal of an exact health-effect instance, unit tests, and a separate example of native health callbacks. General cross-mod transformation and conflict-resolution contracts are not implemented yet.
+The current prototype provides diagnostic logging, passive body inspection, guarded native health-effect removal, and shared contribution attribution and resolution. A health adapter selects exact pawn/body-part scopes and keeps cooperating effects independent. Gameplay arbitration and general transformation systems remain outside these contracts.
 
 ## Requirements
 
@@ -34,7 +34,19 @@ dotnet test RimWeave.sln --configuration Release
 
 Debug and Release currently share each mod's output directory. The last build determines which configuration is installed when copying that directory.
 
-Unit tests cover log formatting and health-removal guards: null arguments, absent instances, and pawn mismatches. The shared `HealthTestPawns.CreateForGuardChecks` helper creates fresh minimal native objects for paths that must stop before native mutation. Successful native removal, callback side effects, and game integration require separate in-game validation.
+Unit tests cover log formatting, shared attribution and resolution with different contribution types, exact health-effect targeting, and native-removal guards. `HealthTestPawns.CreateForGuardChecks` and `ContributionTestData` create minimal native objects for lookup and guard checks. Non-health test contributions validate the shared contract; they do not constitute an in-game object or lock integration. Successful native operations, callback side effects and game integration require separate in-game validation.
+
+## Contribution boundaries
+
+`RimWeave.Contributions` contains the shared identity, attribution and resolution rules. Providers expose metadata through `IContribution` and supply candidates from their authoritative storage. `ContributionResolver` returns a typed, read-only snapshot and reports missing, unique or ambiguous matches. Exclusive claims are explicit; the framework does not choose a winner or treat ordinary observers as competing owners.
+
+`RimWeave.Health` selects candidates from the native health list for one pawn and exact body-part reference; a null part means whole-body effects only. `ContributionHediff` composes the shared metadata and opts out of native merging. The framework keeps no duplicate registry of health effects. Other adapters can reuse the same contracts while retaining their own storage, targeting and lifecycle rules.
+
+Contribution metadata is experimental and is not persisted yet. No new effect or developer command is activated by these APIs alone. Native save/load, object stack changes and additional adapters require their own integration work and validation.
+
+## Developer documentation
+
+Developer documentation is being prepared separately from this repository. A public documentation site is not yet available. It will distinguish released contracts from experimental work and provide integration guides, API reference, examples, and compatibility limits for each documented version.
 
 ## Layout
 
