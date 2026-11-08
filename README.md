@@ -2,7 +2,7 @@
 
 An experimental framework for interoperable RimWorld mods. Gameplay rules and content belong to separate extensions.
 
-The current prototype provides diagnostic logging, passive body inspection, unit tests, and a separate example of native health callbacks. General cross-mod transformation and conflict-resolution contracts are not implemented yet.
+The current prototype provides diagnostic logging, passive body inspection, guarded removal of an exact health-effect instance, unit tests, and a separate example of native health callbacks. General cross-mod transformation and conflict-resolution contracts are not implemented yet.
 
 ## Requirements
 
@@ -57,6 +57,35 @@ Choose `T: Add marker to hand` or `T: Remove marker from hand`, then click a liv
 Opening the menu does not create a marker. Developer mode and the target are checked again when the menu action executes. Release builds omit these debug commands while retaining the component types referenced by the example's definitions.
 
 The two observers belong to this example; they do not establish compatibility between arbitrary mods.
+
+### Repeated removal check
+
+After adding a marker to a hand, search for `marker` again and choose `T: Verify repeated marker removal`. Click the same pawn on the map and choose that hand. This command removes the existing marker; use a disposable test colony.
+
+The check retains the exact instance and calls `HediffOperations.Remove` twice. It checks the returned statuses and counts actual removal callbacks in each observer, independently of log output. Success displays and logs:
+
+```text
+Repeated marker removal PASS: first=Removed, second=NotPresent; callbacks first=[1,1], second=[0,0].
+```
+
+Each observer must run once during the first call and zero times during the second. A failure is displayed in game with the observed values. Opening the tool or choosing a pawn does not run the check; selecting the hand does. The command and its session-only counters are excluded from Release builds. This is an in-game integration check, not part of `dotnet test`.
+
+## Guarded health-effect removal
+
+An extension may retain a temporary `Hediff` after the game has already removed it. Calling the native removal again can replay removal callbacks even though the instance is absent. Those callbacks may have gameplay effects, not just write logs.
+
+`RimWeave.Health.HediffOperations.Remove(pawn, hediff)` checks the pawn association and exact instance membership before delegating to `pawn.health.RemoveHediff`. Call it on the simulation thread with valid native objects. It is available in both build configurations and does not require developer mode.
+
+| Status | Meaning |
+| --- | --- |
+| `Removed` | The instance was present and is absent after the native call returned. |
+| `NotPresent` | The instance was already absent; no native removal or removal callbacks were invoked by this call. |
+| `PawnMismatch` | The instance refers to a different pawn; no native removal was called. This is not an extension-ownership check. |
+| `StillPresent` | The instance remains attached after the native call; side effects may already have occurred. |
+
+Null arguments throw `ArgumentNullException`. Native exceptions propagate and may follow partial changes; the API does not promise rollback. The result's part reference is captured before callbacks and is not a persistent organ identity. The result describes the requested instance, not every side effect of its callbacks.
+
+The API does not intercept direct native calls, maintain a second health-state registry, or provide global conflict detection. It returns a result without automatically logging it: callers decide whether an already absent instance is expected or needs a diagnostic. Repeated calls skip native removal while the same instance remains absent; reattaching it creates a new situation.
 
 ## License
 

@@ -5,6 +5,10 @@ namespace RimWeave.Example.Health;
 
 public abstract class HediffComp_ExampleObserver : HediffComp
 {
+#if DEBUG
+    internal int RemovalCallbackCount { get; private set; }
+#endif
+
     public override void CompPostPostAdd(DamageInfo? dinfo)
     {
         base.CompPostPostAdd(dinfo);
@@ -14,6 +18,9 @@ public abstract class HediffComp_ExampleObserver : HediffComp
     public override void CompPostPostRemoved()
     {
         base.CompPostPostRemoved();
+#if DEBUG
+        RemovalCallbackCount++;
+#endif
         WriteCallback("removed");
     }
 

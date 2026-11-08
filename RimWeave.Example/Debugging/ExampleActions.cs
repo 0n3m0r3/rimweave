@@ -1,6 +1,8 @@
 #if DEBUG
 
 using LudeonTK;
+using RimWeave.Example.Health;
+using RimWeave.Health;
 using RimWeave.Logging;
 using RimWorld;
 using Verse;
@@ -9,17 +11,30 @@ namespace RimWeave.Example.Debugging;
 
 internal static class ExampleActions
 {
+    private enum MarkerAction
+    {
+        Add,
+        Remove,
+        VerifyRepeatedRemoval
+    }
+
     [DebugAction("RimWeave Example", "Add marker to hand",
         actionType = DebugActionType.ToolMapForPawns,
         allowedGameStates = AllowedGameStates.PlayingOnMap)]
-    private static void AddMarker(Pawn pawn) => ChooseHand(pawn, remove: false);
+    private static void AddMarker(Pawn pawn) => ChooseHand(pawn, MarkerAction.Add);
 
     [DebugAction("RimWeave Example", "Remove marker from hand",
         actionType = DebugActionType.ToolMapForPawns,
         allowedGameStates = AllowedGameStates.PlayingOnMap)]
-    private static void RemoveMarker(Pawn pawn) => ChooseHand(pawn, remove: true);
+    private static void RemoveMarker(Pawn pawn) => ChooseHand(pawn, MarkerAction.Remove);
 
-    private static void ChooseHand(Pawn pawn, bool remove)
+    [DebugAction("RimWeave Example", "Verify repeated marker removal",
+        actionType = DebugActionType.ToolMapForPawns,
+        allowedGameStates = AllowedGameStates.PlayingOnMap)]
+    private static void VerifyRepeatedMarkerRemoval(Pawn pawn) =>
+        ChooseHand(pawn, MarkerAction.VerifyRepeatedRemoval);
+
+    private static void ChooseHand(Pawn pawn, MarkerAction action)
     {
         if (DebugTools.curTool is null)
         {
@@ -46,7 +61,7 @@ internal static class ExampleActions
         foreach (var part in parts.Where(part => part.def == BodyPartDefOf.Hand))
         {
             string label = $"{pawn.LabelShort}: {part.Label} (slot {parts.IndexOf(part)})";
-            options.Add(new FloatMenuOption(label, () => Apply(pawn, part, remove)));
+            options.Add(new FloatMenuOption(label, () => Apply(pawn, part, action)));
         }
 
         if (options.Count == 0)
@@ -58,7 +73,7 @@ internal static class ExampleActions
         Find.WindowStack.Add(new FloatMenu(options));
     }
 
-    private static void Apply(Pawn pawn, BodyPartRecord part, bool remove)
+    private static void Apply(Pawn pawn, BodyPartRecord part, MarkerAction action)
     {
         if (!Prefs.DevMode)
         {
@@ -86,7 +101,7 @@ internal static class ExampleActions
 
         var existing = matches.SingleOrDefault();
 
-        if (remove)
+        if (action != MarkerAction.Add)
         {
             if (existing is null)
             {
@@ -94,8 +109,19 @@ internal static class ExampleActions
                 return;
             }
 
-            pawn.health.RemoveHediff(existing);
-            RimWeaveLog.Message($"Example remove result: attached={health.hediffs.Contains(existing)}");
+            if (action == MarkerAction.VerifyRepeatedRemoval)
+            {
+                VerifyRepeatedRemoval(pawn, existing);
+                return;
+            }
+
+            HediffRemovalResult result = HediffOperations.Remove(pawn, existing);
+            RimWeaveLog.Message($"Example remove result: status={result.Status}");
+
+            if (result.Status != HediffRemovalStatus.Removed)
+            {
+                Reject($"Marker removal returned {result.Status}.");
+            }
             return;
         }
 
@@ -117,6 +143,63 @@ internal static class ExampleActions
         var marker = HediffMaker.MakeHediff(definition, pawn, part);
         pawn.health.AddHediff(marker, part);
         RimWeaveLog.Message($"Example add result: attached={health.hediffs.Contains(marker)}");
+    }
+
+    private static void VerifyRepeatedRemoval(Pawn pawn, Hediff marker)
+    {
+        if (marker is not HediffWithComps withComps)
+        {
+            Reject("Repeated removal check requires a marker with components.");
+            return;
+        }
+
+        var firstObserver = withComps.comps.OfType<HediffComp_FirstObserver>().SingleOrDefault();
+        var secondObserver = withComps.comps.OfType<HediffComp_SecondObserver>().SingleOrDefault();
+
+        if (firstObserver is null || secondObserver is null)
+        {
+            Reject("Repeated removal check requires both example observers.");
+            return;
+        }
+
+        int firstBefore = firstObserver.RemovalCallbackCount;
+        int secondBefore = secondObserver.RemovalCallbackCount;
+
+        HediffRemovalResult first = HediffOperations.Remove(pawn, marker);
+        int firstAfter = firstObserver.RemovalCallbackCount;
+        int secondAfter = secondObserver.RemovalCallbackCount;
+
+        if (first.Status != HediffRemovalStatus.Removed)
+        {
+            Reject($"Repeated marker removal FAIL: first={first.Status}; second call skipped.");
+            return;
+        }
+
+        // Keep the removed instance: looking it up again would bypass the API's absence guard.
+        HediffRemovalResult second = HediffOperations.Remove(pawn, marker);
+        int firstDelta = firstAfter - firstBefore;
+        int secondDelta = secondAfter - secondBefore;
+        int firstRepeatDelta = firstObserver.RemovalCallbackCount - firstAfter;
+        int secondRepeatDelta = secondObserver.RemovalCallbackCount - secondAfter;
+
+        bool passed = second.Status == HediffRemovalStatus.NotPresent
+            && firstDelta == 1 && secondDelta == 1
+            && firstRepeatDelta == 0 && secondRepeatDelta == 0
+            && !pawn.health.hediffSet.hediffs.Any(current => ReferenceEquals(current, marker));
+
+        string message = $"Repeated marker removal {(passed ? "PASS" : "FAIL")}: "
+            + $"first={first.Status}, second={second.Status}; "
+            + $"callbacks first=[{firstDelta},{secondDelta}], "
+            + $"second=[{firstRepeatDelta},{secondRepeatDelta}].";
+
+        if (!passed)
+        {
+            Reject(message);
+            return;
+        }
+
+        RimWeaveLog.Message(message);
+        Messages.Message(message, MessageTypeDefOf.TaskCompletion, historical: false);
     }
 
     private static bool IsAvailable(Pawn pawn) =>
