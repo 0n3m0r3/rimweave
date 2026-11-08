@@ -99,6 +99,14 @@ Null arguments throw `ArgumentNullException`. Native exceptions propagate and ma
 
 The API does not intercept direct native calls, maintain a second health-state registry, or provide global conflict detection. It returns a result without automatically logging it: callers decide whether an already absent instance is expected or needs a diagnostic. Repeated calls skip native removal while the same instance remains absent; reattaching it creates a new situation.
 
+### Removal by contribution identity
+
+`RimWeave.Health.ContributionOperations.Remove(pawn, contribution, part)` resolves an identity on one pawn and exact body-part reference, then delegates a unique match to the guarded instance-removal API above. A null part means whole-body effects only. Missing or ambiguous matches trigger no native removal or removal callbacks from this call.
+
+The result retains `Lookup`, the candidates observed before removal, and a nullable `Removal` outcome. A null `Removal` means no unique candidate was resolved. A non-null `Removal` still requires inspecting its status: finding one candidate does not guarantee its removal. An exclusive-claim conflict does not prevent removing a uniquely identified contribution, which may be how an extension resolves that conflict. Attribution is not an authorization boundary; native exceptions and partial side effects retain the existing semantics.
+
+Unit tests exercise rejected lookups, exact scoping and delegation to the existing pawn-mismatch guard without native callbacks. A successful removal through this identity-based entry point still requires in-game validation.
+
 ## License
 
 Original RimWeave code is licensed under the MIT License. See [LICENSE](LICENSE).
