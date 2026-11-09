@@ -1,6 +1,7 @@
 using RimWeave.Contributions;
 using RimWeave.Logging;
 using RimWeave.Persistence;
+using RimWeave.References;
 using Verse;
 
 namespace RimWeave.Health;
@@ -26,6 +27,36 @@ public class ContributionHediff : HediffWithComps, IContribution
         if (Scribe.mode == LoadSaveMode.PostLoadInit && Metadata.LoadError is not null)
             RimWeaveLog.Message($"Contribution metadata unavailable on {def?.defName} (Hediff {loadID}): "
                 + $"{Metadata.LoadError} The native effect and unreadable metadata are retained.");
+    }
+
+    /// <summary>Records the owner's death without deciding whether a consumer may still use its reference.</summary>
+    public override void Notify_PawnDied(DamageInfo? dinfo, Hediff? culprit = null)
+    {
+        ReferenceTrackingGameComponent.NotifyHealth(this, ReferenceChanges.Died);
+        base.Notify_PawnDied(dinfo, culprit);
+    }
+
+    /// <summary>Records native resurrection without restarting a consumer's activity.</summary>
+    public override void Notify_Resurrected()
+    {
+        ReferenceTrackingGameComponent.NotifyHealth(this, ReferenceChanges.Resurrected);
+        base.Notify_Resurrected();
+    }
+
+    /// <summary>Distinguishes native pawn discard from destruction of its corpse alone.</summary>
+    public override void Notify_PawnCorpseDestroyed()
+    {
+        if (pawn.Discarded)
+            ReferenceTrackingGameComponent.NotifyHealth(this, ReferenceChanges.Discarded);
+        base.Notify_PawnCorpseDestroyed();
+    }
+
+    /// <summary>Records detachment of this exact instance and releases its active subscriptions.</summary>
+    public override void PostRemoved()
+    {
+        if (!pawn.health.hediffSet.hediffs.Any(effect => ReferenceEquals(effect, this)))
+            ReferenceTrackingGameComponent.NotifyHealth(this, ReferenceChanges.EffectDetached);
+        base.PostRemoved();
     }
 
     /// <summary>Declines every native merge request to preserve this instance's independent lifetime.</summary>

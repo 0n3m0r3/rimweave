@@ -1,0 +1,5 @@
+<Project>
+    <PropertyGroup>
+        <RimWorldDir>/absolute/path/to/RimWorld</RimWorldDir>
+    </PropertyGroup>
+</Project>
