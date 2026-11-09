@@ -11,6 +11,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <InternalsVisibleTo Include="RimWeave.Tests" />
         <ProjectReference Include="../RimWeave/RimWeave.csproj" Private="false" />
 
         <Reference Include="Assembly-CSharp">

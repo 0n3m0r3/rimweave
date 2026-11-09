@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+    <HediffDef>
+        <defName>RimWeave_ReferenceMarker</defName>
+        <label>reference scenario marker</label>
+        <description>A harmless marker added only by the explicit reference scenario.</description>
+        <hediffClass>RimWeave.Health.ContributionHediff</hediffClass>
+        <isBad>false</isBad>
+        <makesAlert>false</makesAlert>
+        <everCurableByItem>false</everCurableByItem>
+        <initialSeverity>1</initialSeverity>
+        <maxSeverity>1</maxSeverity>
+        <tendable>false</tendable>
+        <scenarioCanAdd>false</scenarioCanAdd>
+    </HediffDef>
+</Defs>

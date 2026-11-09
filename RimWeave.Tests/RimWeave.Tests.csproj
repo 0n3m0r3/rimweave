@@ -20,6 +20,7 @@
 
     <ItemGroup>
         <ProjectReference Include="../RimWeave/RimWeave.csproj" />
+        <ProjectReference Include="../RimWeave.Example/RimWeave.Example.csproj" />
     </ItemGroup>
 
     <ItemGroup>
