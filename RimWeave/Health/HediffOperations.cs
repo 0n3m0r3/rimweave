@@ -62,6 +62,6 @@ public static class HediffOperations
         }
     }
 
-    private static bool IsAttached(Pawn pawn, Hediff hediff) =>
+    internal static bool IsAttached(Pawn pawn, Hediff hediff) =>
         pawn.health.hediffSet.hediffs.Any(current => ReferenceEquals(current, hediff));
 }
