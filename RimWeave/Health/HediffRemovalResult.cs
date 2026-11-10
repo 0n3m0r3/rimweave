@@ -15,7 +15,10 @@ public enum HediffRemovalStatus
     PawnMismatch,
 
     /// <summary>The instance is still attached after the native call; side effects may have occurred.</summary>
-    StillPresent
+    StillPresent,
+
+    /// <summary>A removal call for this attached instance is already in progress; no native removal was called again.</summary>
+    AlreadyRemoving
 }
 
 /// <summary>An observed removal outcome for the requested pawn and instance.</summary>

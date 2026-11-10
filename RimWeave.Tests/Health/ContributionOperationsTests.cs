@@ -162,6 +162,34 @@ public sealed class ContributionOperationsTests
         AssertNoCallbacks(effect);
     }
 
+    [Fact]
+    public void Remove_ReentrantIdentityLookup_PreservesTheAlreadyRemovingOutcome()
+    {
+        var pawn = HealthTestPawns.CreateForGuardChecks();
+        var effect = ContributionTestData.AttachForLookup<ObservedContribution>(pawn, Id);
+        ContributionRemovalResult? nested = null;
+        var failure = new InvalidOperationException("Stop before native health mutation.");
+        effect.OnPreRemoved = () =>
+        {
+            if (effect.PreRemovedCalls == 1)
+                nested = ContributionOperations.Remove(pawn, Id);
+            throw failure;
+        };
+
+        Assert.Same(failure,
+            Assert.Throws<InvalidOperationException>(() => ContributionOperations.Remove(pawn, Id)));
+
+        Assert.NotNull(nested);
+        Assert.Equal(ContributionLookupStatus.Found, nested.Lookup.Status);
+        Assert.Same(effect, Assert.Single(nested.Lookup.Matches));
+        Assert.NotNull(nested.Removal);
+        Assert.Equal(HediffRemovalStatus.AlreadyRemoving, nested.Removal.Status);
+        Assert.Same(effect, nested.Removal.Hediff);
+        Assert.Equal(1, effect.PreRemovedCalls);
+        Assert.Equal(0, effect.PostRemovedCalls);
+        Assert.Same(effect, Assert.Single(pawn.health.hediffSet.hediffs));
+    }
+
     private static void AssertNoCallbacks(params ObservedContribution[] effects)
     {
         foreach (var effect in effects)
@@ -175,8 +203,13 @@ public sealed class ContributionOperationsTests
     {
         public int PreRemovedCalls { get; private set; }
         public int PostRemovedCalls { get; private set; }
+        public Action? OnPreRemoved { get; set; }
 
-        public override void PreRemoved() => PreRemovedCalls++;
+        public override void PreRemoved()
+        {
+            PreRemovedCalls++;
+            OnPreRemoved?.Invoke();
+        }
         public override void PostRemoved() => PostRemovedCalls++;
     }
 }

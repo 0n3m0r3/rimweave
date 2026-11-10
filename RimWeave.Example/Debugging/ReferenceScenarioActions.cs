@@ -1,5 +1,6 @@
 #if DEBUG
 using LudeonTK;
+using RimWeave.Debugging;
 using RimWeave.Example.References;
 using RimWeave.Logging;
 using RimWorld;
@@ -79,9 +80,8 @@ internal static class ReferenceScenarioActions
     {
         RimWeaveLog.Message(report);
         bool failed = report.Contains("FAIL", StringComparison.Ordinal) || report.Contains("REFUSED", StringComparison.Ordinal);
-        Messages.Message(report.Split('\n')[0], failed ? MessageTypeDefOf.RejectInput : MessageTypeDefOf.TaskCompletion,
-            historical: false);
-        Find.WindowStack.Add(new Dialog_MessageBox(report));
+        InspectionPresentation.Show(report,
+            notificationType: failed ? MessageTypeDefOf.RejectInput : MessageTypeDefOf.TaskCompletion);
     }
 }
 #endif

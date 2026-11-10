@@ -32,5 +32,6 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="RimWeave.Tests" />
+        <InternalsVisibleTo Include="RimWeave.Example" Condition="'$(Configuration)' == 'Debug'" />
     </ItemGroup>
 </Project>
