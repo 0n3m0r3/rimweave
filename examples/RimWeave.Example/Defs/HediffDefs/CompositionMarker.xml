@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+    <HediffDef>
+        <defName>RimWeave_CompositionMedical</defName>
+        <label>composition A marker</label>
+        <description>An explicitly added marker for the independent-consumer example.</description>
+        <hediffClass>RimWeave.Health.ContributionHediff</hediffClass>
+        <isBad>false</isBad>
+        <makesAlert>false</makesAlert>
+        <everCurableByItem>false</everCurableByItem>
+        <initialSeverity>1</initialSeverity>
+        <maxSeverity>1</maxSeverity>
+        <tendable>false</tendable>
+        <scenarioCanAdd>false</scenarioCanAdd>
+    </HediffDef>
+</Defs>

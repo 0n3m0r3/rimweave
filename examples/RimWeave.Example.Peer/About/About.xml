@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+    <name>RimWeave Example Peer</name>
+    <author>RimWeave Framework</author>
+    <packageId>rimweave.example.peer</packageId>
+
+    <supportedVersions>
+        <li>1.7</li>
+    </supportedVersions>
+
+    <description>Independent second consumer for the composition example. No effects are applied automatically.</description>
+
+    <modDependencies>
+        <li>
+            <packageId>rimweave.framework</packageId>
+            <displayName>RimWeave Framework</displayName>
+            <downloadUrl>https://github.com/0n3m0r3/rimweave</downloadUrl>
+        </li>
+    </modDependencies>
+
+    <loadAfter>
+        <li>rimweave.framework</li>
+    </loadAfter>
+</ModMetaData>

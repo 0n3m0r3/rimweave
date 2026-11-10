@@ -24,3 +24,4 @@ AGENTS.override.md
 
 # Example mod build outputs
 /examples/RimWeave.Example/Assemblies/
+/examples/RimWeave.Example.Peer/Assemblies/

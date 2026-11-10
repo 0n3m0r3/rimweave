@@ -26,6 +26,8 @@ Copy the complete `mod/` directory into its own folder under RimWorld's `Mods/` 
 
 The optional developer example is built with the solution. To try it, also copy `examples/RimWeave.Example/` into a separate mod folder and enable **RimWeave Example** after the framework. Use a disposable colony for the example's developer actions.
 
+For the two-consumer composition example, also copy `examples/RimWeave.Example.Peer/` into its own mod folder and enable **RimWeave Example Peer** after the framework. Both examples work independently and may load in either order relative to each other. In a Debug build, their explicit developer actions add or remove their own marker on the first native hand slot of a selected pawn; enabling either mod applies no effects automatically. The documentation site contains the verification procedure and its tested boundaries.
+
 ## Developer documentation
 
 Explanations, integration guides and the API reference are maintained in a separate documentation site. The first preview is under review and has not been published yet.
