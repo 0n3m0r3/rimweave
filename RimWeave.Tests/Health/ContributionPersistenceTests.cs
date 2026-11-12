@@ -92,6 +92,7 @@ public sealed class ContributionPersistenceTests
         Add(state, definitions, 301, definitions.Left, new ContributionId("example.owner", "marker"));
         var xml = XDocument.Parse(scribe.Save(state));
         xml.Descendants("rimweaveContribution").Remove();
+        definitions.Effect.modExtensions = [XmlDeclaration()];
 
         var loaded = scribe.Load<HealthSnapshot>(xml.ToString(), definitions.Body);
 
@@ -146,6 +147,7 @@ public sealed class ContributionPersistenceTests
         var xml = XDocument.Parse(scribe.Save(state));
         var damaged = XElement.Parse("<rimweaveContribution>" + fields + "</rimweaveContribution>");
         Assert.Single(xml.Descendants("rimweaveContribution")).ReplaceWith(damaged);
+        definitions.Effect.modExtensions = [XmlDeclaration()];
 
         var loaded = scribe.Load<HealthSnapshot>(xml.ToString(), definitions.Body);
         AssertUnavailable(loaded, definitions, identity);
@@ -157,6 +159,34 @@ public sealed class ContributionPersistenceTests
         var reloaded = scribe.Load<HealthSnapshot>(preserved.ToString(), definitions.Body);
         AssertUnavailable(reloaded, definitions, identity);
     }
+
+    [Fact]
+    public void Reload_AfterXmlChanges_PreservesSavedAttributionWithoutApplyingNewDefaults()
+    {
+        using var scribe = new ScribeTestScope();
+        using var definitions = new HealthDefinitions();
+        var state = new HealthSnapshot(definitions.Body);
+        var savedIdentity = new ContributionId("saved.owner", "existing");
+        var effect = Add(state, definitions, 601, definitions.Left, savedIdentity);
+        effect.Metadata.ClaimExclusiveResponsibility("saved/claim");
+        var xml = scribe.Save(state);
+        definitions.Effect.modExtensions = [XmlDeclaration()];
+
+        var loaded = scribe.Load<HealthSnapshot>(xml, definitions.Body);
+
+        var restored = Assert.IsType<ContributionHediff>(Assert.Single(loaded.Effects.hediffs));
+        Assert.Equal(savedIdentity, restored.Metadata.Identity);
+        Assert.Equal("saved/claim", restored.Metadata.ExclusiveResponsibility);
+        Assert.Equal(601, restored.loadID);
+        Assert.Same(definitions.Left, restored.Part);
+        Assert.Equal(0, Assert.IsType<SaveObserver>(Assert.Single(restored.comps)).AddCalls);
+        Assert.Equal(new ContributionId("xml.owner", "new"), ContributionDefExtension.Read(definitions.Effect)!.Identity);
+    }
+
+    private static ContributionDefExtension XmlDeclaration() => new()
+    {
+        ownerId = "xml.owner", localId = "new", exclusiveResponsibility = "xml/claim"
+    };
 
     private static void AssertUnavailable(HealthSnapshot state, HealthDefinitions definitions, ContributionId identity)
     {

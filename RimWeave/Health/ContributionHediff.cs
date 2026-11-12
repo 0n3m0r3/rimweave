@@ -18,6 +18,24 @@ public class ContributionHediff : HediffWithComps, IContribution
     /// <summary>The shared metadata restored with this native effect, including any load diagnostic.</summary>
     public ContributionMetadata Metadata => _metadataScribe.Metadata;
 
+    /// <summary>Initializes optional XML attribution before native creation callbacks.</summary>
+    /// <remarks>
+    /// Use HediffMaker.MakeHediff for creation. Native Scribe loading does not call this method.
+    /// Subclasses must call base.PostMake; invalid declarations fail before native creation callbacks.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Declared attribution is invalid or conflicts with existing metadata.</exception>
+    public override void PostMake()
+    {
+        var declaration = ContributionDefExtension.Read(def);
+        if (declaration is not null)
+        {
+            Metadata.AssignIdentity(declaration.Identity!);
+            if (declaration.ExclusiveResponsibility is not null)
+                Metadata.ClaimExclusiveResponsibility(declaration.ExclusiveResponsibility);
+        }
+        base.PostMake();
+    }
+
     /// <summary>Restores native health state and contribution metadata without replaying an effect.</summary>
     /// <remarks>Overrides in extensions must call base.ExposeData in every native save/load phase.</remarks>
     public override void ExposeData()

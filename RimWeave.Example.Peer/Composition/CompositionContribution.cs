@@ -8,8 +8,13 @@ namespace RimWeave.Example.Peer.Composition;
 public static class CompositionContribution
 {
     public const string DefinitionName = "RimWeave_CompositionTemporary";
-    public const string Responsibility = "rimweave.examples/hand-state";
-    public static ContributionId Identity { get; } = new("rimweave.example.peer", "hand-state");
+    public static string Responsibility => Declaration.ExclusiveResponsibility
+        ?? throw new InvalidOperationException("The peer example must declare an exclusive responsibility.");
+    public static ContributionId Identity => Declaration.Identity!;
+
+    private static ContributionMetadata Declaration => ContributionDefExtension.Read(
+        DefDatabase<HediffDef>.GetNamed(DefinitionName))
+        ?? throw new InvalidOperationException("The peer example must declare contribution metadata in XML.");
 
     public static ContributionAdditionResult Add(Pawn pawn, BodyPartRecord part)
     {
@@ -23,8 +28,6 @@ public static class CompositionContribution
         var definition = DefDatabase<HediffDef>.GetNamed(DefinitionName);
         if (HediffMaker.MakeHediff(definition, pawn, part) is not ContributionHediff effect)
             throw new InvalidOperationException("The composition definition must use ContributionHediff.");
-        effect.Metadata.AssignIdentity(Identity);
-        effect.Metadata.ClaimExclusiveResponsibility(Responsibility);
         effect.Metadata.DescribeOrigin(new ContributionOrigin(
             new ContributionOriginType("rimweave.example.peer", "temporary-test")));
         return ContributionOperations.Add(pawn, effect, part);

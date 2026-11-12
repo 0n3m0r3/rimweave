@@ -5,6 +5,13 @@
         <label>composition B marker</label>
         <description>An explicitly added marker for the independent-consumer example.</description>
         <hediffClass>RimWeave.Health.ContributionHediff</hediffClass>
+        <modExtensions>
+            <li Class="RimWeave.Health.ContributionDefExtension">
+                <ownerId>rimweave.example.peer</ownerId>
+                <localId>hand-state</localId>
+                <exclusiveResponsibility>rimweave.examples/hand-state</exclusiveResponsibility>
+            </li>
+        </modExtensions>
         <isBad>false</isBad>
         <makesAlert>false</makesAlert>
         <everCurableByItem>false</everCurableByItem>

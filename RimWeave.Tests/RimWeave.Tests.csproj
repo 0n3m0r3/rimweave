@@ -25,6 +25,11 @@
     </ItemGroup>
 
     <ItemGroup>
+        <None Include="../examples/RimWeave.Example.Peer/Defs/HediffDefs/CompositionMarker.xml"
+              Link="Fixtures/PeerComposition.xml" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
         <Reference Include="Assembly-CSharp">
             <HintPath>$(RimWorldDir)/Assembly-CSharp.dll</HintPath>
             <Private>true</Private>

@@ -11,8 +11,12 @@ using Temporary = RimWeave.Example.Peer.Composition.CompositionContribution;
 namespace RimWeave.Tests.Health;
 
 [Collection(ScribeTestCollection.Name)]
-public sealed class CompositionConsumerTests
+public sealed class CompositionConsumerTests : IDisposable
 {
+    private readonly PeerDefinitionScope _definitions = new();
+
+    public void Dispose() => _definitions.Dispose();
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
