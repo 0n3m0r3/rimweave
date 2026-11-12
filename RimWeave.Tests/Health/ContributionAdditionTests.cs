@@ -105,6 +105,67 @@ public sealed class ContributionAdditionTests
     }
 
     [Fact]
+    public void Add_MissingHandBelowAnArtificialArm_DoesNotRetargetToPresentParts()
+    {
+        var arm = new BodyPartRecord { def = new BodyPartDef() };
+        var handDefinition = new BodyPartDef();
+        var hand = new BodyPartRecord { def = handDefinition, parent = arm };
+        var otherHand = new BodyPartRecord { def = handDefinition };
+        arm.parts.Add(hand);
+        var pawn = CreatePawn(arm, hand, otherHand);
+        var prosthesis = new Hediff_AddedPart { pawn = pawn, Part = arm };
+        var missing = new Hediff_MissingPart { pawn = pawn, Part = hand };
+        pawn.health.hediffSet.hediffs.AddRange([prosthesis, missing]);
+        var identity = new ContributionId("example.provider", "limb-state");
+        var onArm = ContributionTestData.AttachForLookup(pawn, identity, arm);
+        var onOtherHand = ContributionTestData.AttachForLookup(pawn, identity, otherHand);
+        var before = pawn.health.hediffSet.hediffs.ToArray();
+        var effect = Prepare(pawn, hand);
+        effect.Metadata.AssignIdentity(identity);
+
+        var result = ContributionOperations.Add(pawn, effect, hand);
+
+        Assert.Equal(ContributionAdditionStatus.MissingPart, result.Status);
+        Assert.Same(hand, result.ObservedPart);
+        Assert.Equal(before, pawn.health.hediffSet.hediffs);
+        Assert.Equal(ContributionLookupStatus.NotPresent,
+            ContributionQueries.Resolve(pawn, identity, hand).Status);
+        Assert.Same(onArm, Assert.Single(ContributionQueries.Resolve(pawn, identity, arm).Matches));
+        Assert.Same(onOtherHand, Assert.Single(ContributionQueries.Resolve(pawn, identity, otherHand).Matches));
+        Assert.Equal(0, effect.AddCalls);
+    }
+
+    [Fact]
+    public void Add_ArtificialArmWithMissingHand_ReachesNativeAdditionOnTheExactArm()
+    {
+        var definition = new BodyPartDef();
+        var arm = new BodyPartRecord { def = definition };
+        var otherArm = new BodyPartRecord { def = definition };
+        var hand = new BodyPartRecord { def = new BodyPartDef(), parent = arm };
+        arm.parts.Add(hand);
+        var pawn = CreatePawn(arm, hand, otherArm);
+        var prosthesis = new Hediff_AddedPart { pawn = pawn, Part = arm, def = new HediffDef() };
+        var missing = new Hediff_MissingPart { pawn = pawn, Part = hand, def = new HediffDef() };
+        pawn.health.hediffSet.hediffs.AddRange([prosthesis, missing]);
+        var identity = new ContributionId("example.provider", "limb-state");
+        var independent = ContributionTestData.AttachForLookup(pawn, identity, otherArm);
+        var effect = Prepare(pawn, arm);
+        effect.Metadata.AssignIdentity(identity);
+        var stop = new InvalidOperationException("Stop after native insertion in the guard fixture.");
+        effect.OnAdd = () => throw stop;
+
+        Assert.Same(stop, Assert.Throws<InvalidOperationException>(
+            () => ContributionOperations.Add(pawn, effect, arm)));
+
+        Assert.Equal(1, effect.AddCalls);
+        Assert.Same(arm, effect.Part);
+        Assert.Same(otherArm, independent.Part);
+        Assert.Equal(identity, independent.Metadata.Identity);
+        Assert.Equal(new Hediff[] { prosthesis, missing, independent, effect }, pawn.health.hediffSet.hediffs);
+        Assert.Same(effect, Assert.Single(ContributionQueries.Resolve(pawn, identity, arm).Matches));
+    }
+
+    [Fact]
     public void Add_WholeBodyWithDefaultPart_DoesNotChooseAnImplicitTarget()
     {
         var pawn = CreatePawn();
