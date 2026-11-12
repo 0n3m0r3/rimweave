@@ -1,3 +1,4 @@
+using RimWeave.Contributions;
 using RimWeave.Health;
 using RimWeave.Tests.Helpers;
 using Verse;
@@ -76,17 +77,30 @@ public sealed class ContributionAdditionTests
     }
 
     [Fact]
-    public void Add_MissingPart_IsRejectedWithoutChangingExistingEffects()
+    public void Add_MissingPart_DoesNotReuseAnIdenticalContributionOnTheOtherHand()
     {
-        var part = new BodyPartRecord();
-        var pawn = CreatePawn(part);
+        var definition = new BodyPartDef();
+        var part = new BodyPartRecord { def = definition };
+        var otherHand = new BodyPartRecord { def = definition };
+        var pawn = CreatePawn(part, otherHand);
         var missing = new Hediff_MissingPart { pawn = pawn, Part = part };
         pawn.health.hediffSet.hediffs.Add(missing);
+        var identity = new ContributionId("example.provider", "hand-state");
+        var independent = ContributionTestData.AttachForLookup(pawn, identity, otherHand);
         var effect = Prepare(pawn, part);
+        effect.Metadata.AssignIdentity(identity);
 
-        Assert.Equal(ContributionAdditionStatus.MissingPart,
-            ContributionOperations.Add(pawn, effect, part).Status);
-        Assert.Same(missing, Assert.Single(pawn.health.hediffSet.hediffs));
+        var result = ContributionOperations.Add(pawn, effect, part);
+
+        Assert.Equal(ContributionAdditionStatus.MissingPart, result.Status);
+        Assert.Same(effect, result.Hediff);
+        Assert.Same(part, result.ObservedPart);
+        Assert.Same(otherHand, independent.Part);
+        Assert.Equal(identity, independent.Metadata.Identity);
+        Assert.Equal(new Hediff[] { missing, independent }, pawn.health.hediffSet.hediffs);
+        Assert.Equal(ContributionLookupStatus.NotPresent,
+            ContributionQueries.Resolve(pawn, identity, part).Status);
+        Assert.Same(independent, Assert.Single(ContributionQueries.Resolve(pawn, identity, otherHand).Matches));
         Assert.Equal(0, effect.AddCalls);
     }
 
