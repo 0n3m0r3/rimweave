@@ -37,6 +37,19 @@ public sealed record NativeReferenceSnapshot
     public Hediff? Effect { get; init; }
     /// <summary>The pawn's directly occupied map when observed, if any.</summary>
     public Map? Map { get; init; }
+    /// <summary>The native map occupied directly or reached through the pawn's holders, if any.</summary>
+    /// <remarks>
+    /// Reads Pawn.MapHeld at capture time. A held map does not imply direct spawning or accessibility.
+    /// Holder movements between captures are outside the reference's notification coverage.
+    /// </remarks>
+    public Map? MapHeld { get; init; }
+    /// <summary>The pawn's immediate native holder when observed, if any; not the root holder.</summary>
+    /// <remarks>
+    /// Reads Pawn.ParentHolder at capture time without retaining a separate ownership graph.
+    /// Null can mean a resolved pawn has no holder; inspect Resolution separately.
+    /// The native holder remains mutable and is not persisted by this snapshot.
+    /// </remarks>
+    public IThingHolder? ParentHolder { get; init; }
     /// <summary>Whether the resolved pawn was spawned directly on a map.</summary>
     public bool? Spawned { get; init; }
     /// <summary>The observed native death state, independent of resolution.</summary>

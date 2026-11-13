@@ -91,6 +91,8 @@ public sealed class NativeReference : IExposable, IDisposable
             Pawn = _pawn,
             Effect = _effect,
             Map = _pawn!.Map,
+            MapHeld = _pawn.MapHeld,
+            ParentHolder = _pawn.ParentHolder,
             Spawned = _pawn.Spawned,
             Dead = _pawn.Dead,
             Destroyed = _pawn.Destroyed,
