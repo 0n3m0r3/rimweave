@@ -148,6 +148,52 @@ public sealed class ContributionDefExtensionTests
         Assert.Empty(pawn.health.hediffSet.hediffs);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NativeCreation_AfterDeclarationChange_KeepsEarlierInstancesIndependent(bool removeDeclaration)
+    {
+        using var game = new NativeGameTestScope();
+        game.Game.uniqueIDsManager = new UniqueIDsManager();
+        var definition = Definition();
+        definition.comps = [new HediffCompProperties { compClass = typeof(CreationObserver) }];
+        var original = (ContributionDefExtension)definition.modExtensions[0];
+        original.exclusiveResponsibility = "example/old-claim";
+        var pawn = HealthTestPawns.CreateForGuardChecks();
+        var first = Assert.IsType<ContributionHediff>(HediffMaker.MakeHediff(definition, pawn));
+        var firstIdentity = first.Metadata.Identity;
+        var origin = new ContributionOrigin(new ContributionOriginType("example.owner", "creation"));
+        first.Metadata.DescribeOrigin(origin);
+        original.localId = "Next";
+        original.exclusiveResponsibility = "example/new-claim";
+        if (removeDeclaration) definition.modExtensions.Clear();
+
+        var second = Assert.IsType<ContributionHediff>(HediffMaker.MakeHediff(definition, pawn));
+
+        Assert.Equal(firstIdentity, first.Metadata.Identity);
+        Assert.Equal("example/old-claim", first.Metadata.ExclusiveResponsibility);
+        Assert.Equal(origin, first.Metadata.Origin);
+        Assert.NotEqual(first.loadID, second.loadID);
+        Assert.NotSame(first.Metadata, second.Metadata);
+        Assert.Null(second.Metadata.Origin);
+        var observer = Assert.IsType<CreationObserver>(Assert.Single(second.comps));
+        if (removeDeclaration)
+        {
+            Assert.Null(second.Metadata.Identity);
+            Assert.Null(second.Metadata.ExclusiveResponsibility);
+            Assert.Null(observer.IdentityAtCreation);
+            Assert.Null(observer.ClaimAtCreation);
+        }
+        else
+        {
+            Assert.Equal(new ContributionId("example.owner", "Next"), second.Metadata.Identity);
+            Assert.Equal("example/new-claim", second.Metadata.ExclusiveResponsibility);
+            Assert.Equal(second.Metadata.Identity, observer.IdentityAtCreation);
+            Assert.Equal(second.Metadata.ExclusiveResponsibility, observer.ClaimAtCreation);
+        }
+        Assert.Empty(pawn.health.hediffSet.hediffs);
+    }
+
     [Fact]
     public void InvalidCreation_FailsBeforeNativeCallbacksAndRandomDraws()
     {

@@ -160,8 +160,10 @@ public sealed class ContributionPersistenceTests
         AssertUnavailable(reloaded, definitions, identity);
     }
 
-    [Fact]
-    public void Reload_AfterXmlChanges_PreservesSavedAttributionWithoutApplyingNewDefaults()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Reload_AfterXmlChanges_PreservesSavedAttributionWithoutApplyingNewDefaults(bool removeDeclaration)
     {
         using var scribe = new ScribeTestScope();
         using var definitions = new HealthDefinitions();
@@ -169,8 +171,10 @@ public sealed class ContributionPersistenceTests
         var savedIdentity = new ContributionId("saved.owner", "existing");
         var effect = Add(state, definitions, 601, definitions.Left, savedIdentity);
         effect.Metadata.ClaimExclusiveResponsibility("saved/claim");
+        var origin = new ContributionOrigin(new ContributionOriginType("saved.owner", "source"), "saved:instance/1");
+        effect.Metadata.DescribeOrigin(origin);
         var xml = scribe.Save(state);
-        definitions.Effect.modExtensions = [XmlDeclaration()];
+        definitions.Effect.modExtensions = removeDeclaration ? [] : [XmlDeclaration()];
 
         var loaded = scribe.Load<HealthSnapshot>(xml, definitions.Body);
 
@@ -180,7 +184,21 @@ public sealed class ContributionPersistenceTests
         Assert.Equal(601, restored.loadID);
         Assert.Same(definitions.Left, restored.Part);
         Assert.Equal(0, Assert.IsType<SaveObserver>(Assert.Single(restored.comps)).AddCalls);
-        Assert.Equal(new ContributionId("xml.owner", "new"), ContributionDefExtension.Read(definitions.Effect)!.Identity);
+        Assert.Equal(origin, restored.Metadata.Origin);
+        var current = ContributionDefExtension.Read(definitions.Effect);
+        if (removeDeclaration)
+            Assert.Null(current);
+        else
+            Assert.Equal(new ContributionId("xml.owner", "new"), current!.Identity);
+
+        // A second save must retain the instance's attribution, not rewrite it from current defaults.
+        var reloaded = scribe.Load<HealthSnapshot>(scribe.Save(loaded), definitions.Body);
+        var twiceLoaded = Assert.IsType<ContributionHediff>(Assert.Single(reloaded.Effects.hediffs));
+        Assert.Equal(savedIdentity, twiceLoaded.Metadata.Identity);
+        Assert.Equal("saved/claim", twiceLoaded.Metadata.ExclusiveResponsibility);
+        Assert.Equal(origin, twiceLoaded.Metadata.Origin);
+        Assert.Equal(601, twiceLoaded.loadID);
+        Assert.Same(definitions.Left, twiceLoaded.Part);
     }
 
     private static ContributionDefExtension XmlDeclaration() => new()
