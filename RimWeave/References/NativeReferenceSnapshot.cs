@@ -35,6 +35,16 @@ public sealed record NativeReferenceSnapshot
     public Pawn? Pawn { get; init; }
     /// <summary>The resolved exact effect; no substitution by definition or contribution identity occurs.</summary>
     public Hediff? Effect { get; init; }
+    /// <summary>The resolved effect's native part when observed, or null when no part is available.</summary>
+    /// <remarks>
+    /// Reads Hediff.Part at capture time, including for a detached effect. Null can mean a whole-body
+    /// effect, a pawn-only reference, or unavailable resolution; inspect Resolution and Effect separately.
+    /// Pair this record with Pawn: BodyPartRecord objects are shared by pawns using the same BodyDef.
+    /// This is an observed slot reference, not an individual organ identity or proof that the part is present.
+    /// Later reassignment of Hediff.Part does not change this value; referenced native objects remain mutable.
+    /// No part-change notification, retargeting operation or additional persistence is provided.
+    /// </remarks>
+    public BodyPartRecord? EffectPart { get; init; }
     /// <summary>The pawn's directly occupied map when observed, if any.</summary>
     public Map? Map { get; init; }
     /// <summary>The native map occupied directly or reached through the pawn's holders, if any.</summary>

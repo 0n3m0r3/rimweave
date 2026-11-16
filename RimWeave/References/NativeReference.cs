@@ -90,6 +90,7 @@ public sealed class NativeReference : IExposable, IDisposable
         {
             Pawn = _pawn,
             Effect = _effect,
+            EffectPart = _effect?.Part,
             Map = _pawn!.Map,
             MapHeld = _pawn.MapHeld,
             ParentHolder = _pawn.ParentHolder,
