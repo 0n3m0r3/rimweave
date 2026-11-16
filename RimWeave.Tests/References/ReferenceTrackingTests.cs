@@ -302,6 +302,115 @@ public sealed class ReferenceTrackingTests : IDisposable
         Assert.Equal(NativeReferenceResolution.Resolved, current.Capture().Resolution);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ActiveDelivery_DoesNotAllocatePerObserver(bool mapRemoval)
+    {
+        var session = new ReferenceTrackingSession();
+        var pawn = NativeReferenceTests.CreatePawn(24);
+        var references = new List<NativeReference>();
+        try
+        {
+            AddObservers(1);
+            var singleObserverBytes = Measure();
+            AddObservers(511);
+            var manyObserverBytes = Measure();
+
+            Assert.True(manyObserverBytes <= singleObserverBytes,
+                $"Notification allocations grew from {singleObserverBytes} to {manyObserverBytes} bytes.");
+            var expected = mapRemoval ? ReferenceChanges.ContextRemoved : ReferenceChanges.EnteredContext;
+            Assert.All(references, reference => Assert.Equal(expected, reference.TakeChanges()));
+        }
+        finally
+        {
+            foreach (var reference in references) reference.Dispose();
+        }
+
+        void AddObservers(int count)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                var reference = new NativeReference(pawn);
+                reference.StartTracking(session);
+                references.Add(reference);
+            }
+            session.Notify(pawn, null, ReferenceChanges.EnteredContext, 74);
+            foreach (var reference in references) reference.TakeChanges();
+        }
+
+        long Measure()
+        {
+            for (var i = 0; i < 32; i++) Deliver();
+            var allocated = GC.GetAllocatedBytesForCurrentThread();
+            for (var i = 0; i < 128; i++) Deliver();
+            return GC.GetAllocatedBytesForCurrentThread() - allocated;
+        }
+
+        void Deliver()
+        {
+            if (mapRemoval) session.MapRemoved(74);
+            else session.Notify(pawn, null, ReferenceChanges.EnteredContext, 74);
+        }
+    }
+
+    [Fact]
+    public void DetachmentDuringDelivery_ReachesEveryObserverAndPreservesOtherTargets()
+    {
+        using var game = new GameScope();
+        var pawn = NativeReferenceTests.CreatePawn(25);
+        var otherPawn = NativeReferenceTests.CreatePawn(26);
+        var removed = NativeReferenceTests.AddEffect(pawn, 25);
+        var survivor = NativeReferenceTests.AddEffect(pawn, 26);
+        var removedObservers = new List<NativeReference>();
+        var survivingObservers = new List<NativeReference>();
+        using var pawnObserver = new NativeReference(pawn);
+        using var unrelated = new NativeReference(otherPawn);
+        pawnObserver.StartTracking();
+        unrelated.StartTracking();
+        try
+        {
+            for (var i = 0; i < 128; i++)
+            {
+                // Interleave registrations; delivery must not depend on enumeration order.
+                var departing = new NativeReference(removed);
+                departing.StartTracking();
+                removedObservers.Add(departing);
+                var staying = new NativeReference(survivor);
+                staying.StartTracking();
+                survivingObservers.Add(staying);
+            }
+            pawn.health.hediffSet.hediffs.Remove(removed);
+            removed.PostRemoved();
+
+            Assert.All(removedObservers, reference =>
+            {
+                // Read pending facts before snapshot reconciliation can detect a missed detachment.
+                Assert.Equal(ReferenceChanges.EffectDetached | ReferenceChanges.TrackingInterrupted,
+                    reference.PendingChanges);
+                Assert.False(reference.IsTracking);
+                Assert.Same(removed, reference.Capture().Effect);
+            });
+            Assert.All(survivingObservers, reference => Assert.Equal(ReferenceChanges.None, reference.PendingChanges));
+            survivor.Notify_Resurrected();
+            Assert.All(survivingObservers, reference =>
+            {
+                Assert.True(reference.IsTracking);
+                Assert.Equal(ReferenceChanges.Resurrected, reference.TakeChanges());
+            });
+            Assert.Equal(ReferenceChanges.None, pawnObserver.PendingChanges);
+            Assert.Equal(ReferenceChanges.None, unrelated.PendingChanges);
+            Assert.True(pawnObserver.IsTracking);
+            Assert.True(unrelated.IsTracking);
+            Assert.Same(survivor, Assert.Single(pawn.health.hediffSet.hediffs));
+        }
+        finally
+        {
+            foreach (var reference in removedObservers) reference.Dispose();
+            foreach (var reference in survivingObservers) reference.Dispose();
+        }
+    }
+
     [Fact]
     public void DisposedObserver_ReleasesItsSessionWhileKeepingHistoricalIdentity()
     {
@@ -328,6 +437,7 @@ public sealed class ReferenceTrackingTests : IDisposable
         var effect = targetsEffect ? NativeReferenceTests.AddEffect(pawn, 21) : null;
         var reference = effect is null ? new NativeReference(pawn) : new NativeReference(effect);
         reference.StartTracking(session);
+        session.Notify(pawn, null, ReferenceChanges.EnteredContext, 75);
         return (new WeakReference(reference), new WeakReference(pawn), effect is null ? null : new WeakReference(effect));
     }
 

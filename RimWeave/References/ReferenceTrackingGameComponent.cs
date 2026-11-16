@@ -44,26 +44,31 @@ internal sealed class ReferenceTrackingSession
 
     internal void Notify(Pawn pawn, Hediff? effect, ReferenceChanges changes, int? mapId = null)
     {
-        if (!IsCurrent || !Ready) return;
-        // A detached effect releases its subscription during delivery. No consumer callback runs here.
-        foreach (var reference in SnapshotReferences())
-            reference.Observe(pawn, effect, changes, mapId);
+        using var references = BeginDelivery();
+        if (references is null) return;
+        // Only the current subscription can remove itself; no consumer callback runs here.
+        do references.Current.Key.Observe(pawn, effect, changes, mapId);
+        while (references.MoveNext());
     }
 
     internal void MapRemoved(int mapId)
     {
-        if (!IsCurrent || !Ready) return;
-        foreach (var reference in SnapshotReferences())
-            reference.ObserveMapRemoved(mapId);
+        using var references = BeginDelivery();
+        if (references is null) return;
+        do references.Current.Key.ObserveMapRemoved(mapId);
+        while (references.MoveNext());
     }
 
-    private NativeReference[] SnapshotReferences()
+    // Returns an enumerator positioned on its first live entry, or null when delivery is unnecessary.
+    // Weak-table enumeration permits removal and retains only the current entry, not every observer.
+    private IEnumerator<KeyValuePair<NativeReference, object>>? BeginDelivery()
     {
-        if (_references is null) return [];
-        var references = _references.Select(pair => pair.Key).ToArray();
-        // A weak table can retain its historical enumeration cost after every key is gone.
-        // Reconcile on an existing notification; idle sessions need no polling or live-key counter.
-        if (references.Length == 0) _references = null;
-        return references;
+        if (!IsCurrent || !Ready || _references is null) return null;
+        var references = ((IEnumerable<KeyValuePair<NativeReference, object>>)_references).GetEnumerator();
+        if (references.MoveNext()) return references;
+        references.Dispose();
+        // Release historical enumeration cost when an existing notification finds no live entries.
+        _references = null;
+        return null;
     }
 }
