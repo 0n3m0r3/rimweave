@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using RimWeave.Health;
 using RimWeave.References;
 using RimWeave.Tests.Helpers;
@@ -230,6 +231,119 @@ public sealed class ReferenceTrackingTests : IDisposable
         Assert.False(reference.IsTracking);
         Assert.Equal(ReferenceChanges.None, reference.PendingChanges);
         Assert.Equal(NativeReferenceResolution.Resolved, reference.Capture().Resolution);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AbandonedObserver_DoesNotKeepItsTargetAliveAndOtherObserversRemainActive(bool targetsEffect)
+    {
+        var session = new ReferenceTrackingSession();
+        var livePawn = NativeReferenceTests.CreatePawn(20);
+        using var live = new NativeReference(livePawn);
+        live.StartTracking(session);
+        var abandoned = CreateAbandonedObserver(session, targetsEffect);
+
+        CollectAbandonedObjects();
+
+        Assert.False(abandoned.Reference.IsAlive);
+        Assert.False(abandoned.Pawn.IsAlive);
+        if (abandoned.Effect is not null) Assert.False(abandoned.Effect.IsAlive);
+        session.Notify(livePawn, null, ReferenceChanges.EnteredContext, 71);
+        Assert.Equal(ReferenceChanges.EnteredContext, live.TakeChanges());
+        Assert.True(live.IsTracking);
+        GC.KeepAlive(session);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void EmptySession_ReleasesNotificationAllocationsAndCanTrackAgain(bool collect, bool mapRemoval)
+    {
+        var session = new ReferenceTrackingSession();
+        var pawn = NativeReferenceTests.CreatePawn(23);
+        if (collect)
+        {
+            var abandoned = CreateAbandonedObserver(session, targetsEffect: true);
+            CollectAbandonedObjects();
+            Assert.False(abandoned.Reference.IsAlive);
+        }
+        else
+        {
+            using var previous = new NativeReference(pawn);
+            previous.StartTracking(session);
+        }
+
+        if (mapRemoval) session.MapRemoved(72);
+        else session.Notify(pawn, null, ReferenceChanges.LeftContext, 72);
+        // Warm both notification paths before measuring this empty, reconciled session.
+        for (var i = 0; i < 32; i++)
+        {
+            session.Notify(pawn, null, ReferenceChanges.LeftContext, 72);
+            session.MapRemoved(72);
+        }
+        var allocated = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 128; i++)
+        {
+            session.Notify(pawn, null, ReferenceChanges.LeftContext, 72);
+            session.MapRemoved(72);
+        }
+        Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - allocated);
+
+        using var current = new NativeReference(pawn);
+        current.StartTracking(session);
+        session.Notify(pawn, null, ReferenceChanges.EnteredContext, 73);
+        session.MapRemoved(73);
+
+        Assert.True(current.IsTracking);
+        Assert.Equal(ReferenceChanges.EnteredContext | ReferenceChanges.ContextRemoved, current.TakeChanges());
+        Assert.Equal(NativeReferenceResolution.Resolved, current.Capture().Resolution);
+    }
+
+    [Fact]
+    public void DisposedObserver_ReleasesItsSessionWhileKeepingHistoricalIdentity()
+    {
+        using var reference = new NativeReference(NativeReferenceTests.CreatePawn(22));
+        var session = StartWithTemporarySession(reference);
+        var identity = reference.Capture().PawnIdentity;
+
+        reference.Dispose();
+        CollectAbandonedObjects();
+
+        Assert.False(session.IsAlive);
+        Assert.False(reference.IsTracking);
+        Assert.Equal(identity, reference.Capture().PawnIdentity);
+        Assert.Equal(NativeReferenceResolution.Resolved, reference.Capture().Resolution);
+        Assert.Equal(ReferenceChanges.TrackingInterrupted, reference.TakeChanges());
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (WeakReference Reference, WeakReference Pawn, WeakReference? Effect)
+        CreateAbandonedObserver(ReferenceTrackingSession session, bool targetsEffect)
+    {
+        // No native world owns these minimal objects; only the reference and health list connect them.
+        var pawn = NativeReferenceTests.CreatePawn(21);
+        var effect = targetsEffect ? NativeReferenceTests.AddEffect(pawn, 21) : null;
+        var reference = effect is null ? new NativeReference(pawn) : new NativeReference(effect);
+        reference.StartTracking(session);
+        return (new WeakReference(reference), new WeakReference(pawn), effect is null ? null : new WeakReference(effect));
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static WeakReference StartWithTemporarySession(NativeReference reference)
+    {
+        var session = new ReferenceTrackingSession();
+        reference.StartTracking(session);
+        return new WeakReference(session);
+    }
+
+    private static void CollectAbandonedObjects()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
     }
 
     [Fact]

@@ -25,7 +25,7 @@ public sealed class ReferenceTrackingGameComponent : GameComponent
 internal sealed class ReferenceTrackingSession
 {
     // Consumers own their references. A forgotten subscription must not keep an abandoned target alive.
-    private readonly ConditionalWeakTable<NativeReference, object> _references = new();
+    private ConditionalWeakTable<NativeReference, object>? _references;
     private readonly System.WeakReference<Game>? _game;
     private static readonly object Registration = new();
 
@@ -38,21 +38,32 @@ internal sealed class ReferenceTrackingSession
     internal bool Ready { get; set; }
     internal bool IsCurrent => _game is null || (_game.TryGetTarget(out var game) && ReferenceEquals(Current.Game, game));
 
-    internal void Add(NativeReference reference) => _references.Add(reference, Registration);
-    internal void Remove(NativeReference reference) => _references.Remove(reference);
+    internal void Add(NativeReference reference) =>
+        (_references ??= new ConditionalWeakTable<NativeReference, object>()).Add(reference, Registration);
+    internal void Remove(NativeReference reference) => _references?.Remove(reference);
 
     internal void Notify(Pawn pawn, Hediff? effect, ReferenceChanges changes, int? mapId = null)
     {
         if (!IsCurrent || !Ready) return;
         // A detached effect releases its subscription during delivery. No consumer callback runs here.
-        foreach (var reference in _references.Select(pair => pair.Key).ToArray())
+        foreach (var reference in SnapshotReferences())
             reference.Observe(pawn, effect, changes, mapId);
     }
 
     internal void MapRemoved(int mapId)
     {
         if (!IsCurrent || !Ready) return;
-        foreach (var pair in _references)
-            pair.Key.ObserveMapRemoved(mapId);
+        foreach (var reference in SnapshotReferences())
+            reference.ObserveMapRemoved(mapId);
+    }
+
+    private NativeReference[] SnapshotReferences()
+    {
+        if (_references is null) return [];
+        var references = _references.Select(pair => pair.Key).ToArray();
+        // A weak table can retain its historical enumeration cost after every key is gone.
+        // Reconcile on an existing notification; idle sessions need no polling or live-key counter.
+        if (references.Length == 0) _references = null;
+        return references;
     }
 }
