@@ -154,6 +154,46 @@ public sealed class ReferenceTrackingTests : IDisposable
     }
 
     [Fact]
+    public void SilentResurrectionRemoval_InterruptsEachObserverWithoutBorrowingTheSurvivorsCallback()
+    {
+        using var game = new GameScope();
+        var pawn = NativeReferenceTests.CreatePawn(12);
+        var survivor = NativeReferenceTests.AddEffect(pawn, 10);
+        var removed = NativeReferenceTests.AddEffect(pawn, 11);
+        using var first = new NativeReference(removed);
+        using var second = new NativeReference(removed);
+        using var independent = new NativeReference(survivor);
+        using var pawnReference = new NativeReference(pawn);
+        foreach (var reference in new[] { first, second, independent, pawnReference })
+            reference.StartTracking();
+        removed.Notify_PawnDied(null);
+        survivor.Notify_PawnDied(null);
+
+        // Model the inspected native path: remove without PostRemoved, then notify surviving effects.
+        // Complete death, corpse handling and resurrection are verified in a separate game scenario.
+        pawn.health.hediffSet.hediffs.Remove(removed);
+        survivor.Notify_Resurrected();
+        var replacement = NativeReferenceTests.AddEffect(pawn, 12);
+
+        Assert.Equal(removed.Metadata.Identity, replacement.Metadata.Identity);
+        Assert.Same(removed, first.Capture().Effect);
+        Assert.False(first.Capture().EffectAttached);
+        Assert.False(first.IsTracking);
+        var expected = ReferenceChanges.Died | ReferenceChanges.EffectDetached | ReferenceChanges.TrackingInterrupted;
+        Assert.Equal(expected, first.TakeChanges());
+        Assert.Equal(ReferenceChanges.None, first.TakeChanges());
+        Assert.Equal(expected, second.TakeChanges());
+        Assert.False(second.IsTracking);
+        Assert.Same(removed, second.Capture().Effect);
+        Assert.Equal(ReferenceChanges.Died | ReferenceChanges.Resurrected, independent.TakeChanges());
+        Assert.True(independent.IsTracking);
+        Assert.Equal(ReferenceChanges.None, pawnReference.PendingChanges);
+        Assert.True(pawnReference.IsTracking);
+        Assert.Collection(pawn.health.hediffSet.hediffs,
+            effect => Assert.Same(survivor, effect), effect => Assert.Same(replacement, effect));
+    }
+
+    [Fact]
     public void CorpseNotification_OnlySignalsDiscardWhenTheNativePawnWasActuallyDiscarded()
     {
         using var game = new GameScope();

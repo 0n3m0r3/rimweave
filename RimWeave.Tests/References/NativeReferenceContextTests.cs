@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using RimWeave.References;
 using RimWeave.Tests.Helpers;
@@ -105,6 +106,74 @@ public sealed class NativeReferenceContextTests : IDisposable
         Assert.Equal(NativeReferenceResolution.Unresolved, snapshot.Resolution);
         Assert.Null(snapshot.ParentHolder);
         Assert.Null(snapshot.MapHeld);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NativeDeadPawnInCorpse_RemainsResolvedAndCanKeepOrRestartTracking(bool targetsEffect)
+    {
+        var pawn = NativeReferenceTests.CreatePawn(5);
+        var effect = NativeReferenceTests.AddEffect(pawn, 3);
+        using var reference = targetsEffect ? new NativeReference(effect) : new NativeReference(pawn);
+        var session = new ReferenceTrackingSession();
+        reference.StartTracking(session);
+        pawn.health.SetDead();
+        // Pawn.Kill also sets Destroyed; SetDead alone does not represent the complete native state.
+        typeof(Thing).GetField("mapIndexOrState", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(pawn, (sbyte)-2);
+        var corpse = new Corpse();
+        var contents = (ThingOwner<Pawn>)corpse.GetDirectlyHeldThings();
+        // Supply native corpse storage for passive reads; Pawn.Kill is exercised separately in game.
+        contents.InnerListForReading.Add(pawn);
+        pawn.holdingOwner = contents;
+
+        var snapshot = reference.Capture();
+
+        Assert.Equal(NativeReferenceResolution.Resolved, snapshot.Resolution);
+        Assert.Equal(pawn.GetUniqueLoadID(), snapshot.PawnIdentity);
+        Assert.Same(pawn, snapshot.Pawn);
+        Assert.Same(corpse, snapshot.ParentHolder);
+        Assert.True(snapshot.Dead);
+        Assert.True(snapshot.Destroyed);
+        Assert.False(snapshot.Discarded);
+        Assert.False(snapshot.Spawned);
+        Assert.Null(snapshot.Map);
+        Assert.Null(snapshot.MapHeld);
+        Assert.Same(targetsEffect ? effect : null, snapshot.Effect);
+        Assert.Equal(targetsEffect ? true : (bool?)null, snapshot.EffectAttached);
+        Assert.Same(pawn, corpse.InnerPawn);
+        Assert.Same(effect, Assert.Single(pawn.health.hediffSet.hediffs));
+        Assert.True(reference.IsTracking);
+        Assert.Equal(ReferenceChanges.None, reference.PendingChanges);
+
+        reference.StopTracking();
+        Assert.Equal(ReferenceChanges.TrackingInterrupted, reference.TakeChanges());
+        reference.StartTracking(session);
+        Assert.True(reference.IsTracking);
+        Assert.Equal(ReferenceChanges.None, reference.PendingChanges);
+    }
+
+    [Fact]
+    public void DiscardedDeadPawn_RemainsIdentifiableButCannotKeepOrRestartTracking()
+    {
+        var pawn = NativeReferenceTests.CreatePawn(6);
+        using var reference = new NativeReference(pawn);
+        var session = new ReferenceTrackingSession();
+        reference.StartTracking(session);
+        pawn.health.SetDead();
+        typeof(Thing).GetField("mapIndexOrState", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(pawn, (sbyte)-3);
+
+        var snapshot = reference.Capture();
+
+        Assert.Equal(NativeReferenceResolution.Resolved, snapshot.Resolution);
+        Assert.True(snapshot.Dead);
+        Assert.True(snapshot.Discarded);
+        Assert.False(reference.IsTracking);
+        Assert.True(reference.PendingChanges.HasFlag(ReferenceChanges.Discarded));
+        Assert.True(reference.PendingChanges.HasFlag(ReferenceChanges.TrackingInterrupted));
+        Assert.Throws<InvalidOperationException>(() => reference.StartTracking(session));
     }
 
     private sealed class Holder : IThingHolder

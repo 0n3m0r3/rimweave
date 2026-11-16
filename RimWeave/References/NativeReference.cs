@@ -101,10 +101,7 @@ public sealed class NativeReference : IExposable, IDisposable
         };
         if (_session is not null)
         {
-            var unavailable = ReferenceChanges.None;
-            if (snapshot.Destroyed == true) unavailable |= ReferenceChanges.Destroyed;
-            if (snapshot.Discarded == true) unavailable |= ReferenceChanges.Discarded;
-            if (snapshot.EffectAttached == false) unavailable |= ReferenceChanges.EffectDetached;
+            var unavailable = UnavailableChanges(snapshot);
             if (unavailable != ReferenceChanges.None)
             {
                 _changes.Record(unavailable);
@@ -119,6 +116,8 @@ public sealed class NativeReference : IExposable, IDisposable
     /// Call from LoadedGame/StartedNewGame or later, after native map initialization. Pawn-only and ordinary Hediff references receive map events;
     /// health lifecycle notifications require the exact effect to be a cooperating ContributionHediff.
     /// Native and external paths that bypass these callbacks are outside notification coverage.
+    /// Native death can also set Destroyed. A dead pawn may remain tracked until discarded;
+    /// a destroyed living pawn or a detached effect cannot remain tracked.
     /// For example, native resurrection can remove effects before notifying survivors. Capture and
     /// TakeChanges reconcile a detached or destroyed target; they do not reconstruct missing history.
     /// Map events concern direct spawning, not every movement of a pawn inside another holder.
@@ -137,8 +136,7 @@ public sealed class NativeReference : IExposable, IDisposable
         if (!session.IsCurrent || !session.Ready || IsDifferentGame())
             throw new InvalidOperationException("The reference and tracking scope must belong to the current, fully initialized game.");
         var current = Capture();
-        if (current.Resolution != NativeReferenceResolution.Resolved || current.Destroyed == true
-            || current.Discarded == true || current.EffectAttached == false)
+        if (current.Resolution != NativeReferenceResolution.Resolved || UnavailableChanges(current) != ReferenceChanges.None)
             throw new InvalidOperationException("Tracking requires a resolved native owner and an attached effect, when targeted.");
         if (_session == session)
             return;
@@ -256,6 +254,16 @@ public sealed class NativeReference : IExposable, IDisposable
     }
 
     private bool IsAttached() => _pawn!.health.hediffSet.hediffs.Any(effect => ReferenceEquals(effect, _effect));
+
+    private static ReferenceChanges UnavailableChanges(NativeReferenceSnapshot snapshot)
+    {
+        var changes = ReferenceChanges.None;
+        // Pawn.Kill sets Destroyed even while the corpse retains the pawn for native resurrection.
+        if (snapshot.Destroyed == true && snapshot.Dead != true) changes |= ReferenceChanges.Destroyed;
+        if (snapshot.Discarded == true) changes |= ReferenceChanges.Discarded;
+        if (snapshot.EffectAttached == false) changes |= ReferenceChanges.EffectDetached;
+        return changes;
+    }
 
     private bool IsDifferentGame() => _gameScope is null
         ? _pawn is not null || _effect is not null

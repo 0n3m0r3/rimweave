@@ -54,7 +54,7 @@ public sealed record NativeReferenceSnapshot
     public bool? Spawned { get; init; }
     /// <summary>The observed native death state, independent of resolution.</summary>
     public bool? Dead { get; init; }
-    /// <summary>The observed native destruction state, independent of death and map presence.</summary>
+    /// <summary>The observed native destruction state, also set by native death; not proof of irreversible disappearance.</summary>
     public bool? Destroyed { get; init; }
     /// <summary>Whether the native pawn has been discarded.</summary>
     public bool? Discarded { get; init; }

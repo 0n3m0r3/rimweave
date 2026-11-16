@@ -23,7 +23,7 @@ public enum ReferenceChanges
     EffectDetached = 64,
     /// <summary>Observation stopped; no continuity is promised until tracking starts again.</summary>
     TrackingInterrupted = 128,
-    /// <summary>Revalidation observed native destruction; not necessarily an immediate notification.</summary>
+    /// <summary>Revalidation observed a destroyed living pawn; native death alone does not set this flag.</summary>
     Destroyed = 256
 }
 
