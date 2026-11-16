@@ -2,6 +2,7 @@
 
 using LudeonTK;
 using RimWeave.Example.Health;
+using RimWeave.Debugging;
 using RimWeave.Health;
 using RimWeave.Logging;
 using RimWorld;
@@ -55,13 +56,13 @@ internal static class ExampleActions
             return;
         }
 
-        var options = new List<FloatMenuOption>();
+        var options = new List<(string Label, Action Execute)>();
         var parts = pawn.RaceProps.body.AllParts;
 
         foreach (var part in parts.Where(part => part.def == BodyPartDefOf.Hand))
         {
             string label = $"{pawn.LabelShort}: {part.Label} (slot {parts.IndexOf(part)})";
-            options.Add(new FloatMenuOption(label, () => Apply(pawn, part, action)));
+            options.Add((label, () => Apply(pawn, part, action)));
         }
 
         if (options.Count == 0)
@@ -70,7 +71,7 @@ internal static class ExampleActions
             return;
         }
 
-        Find.WindowStack.Add(new FloatMenu(options));
+        CommandSelection.Show(options);
     }
 
     private static void Apply(Pawn pawn, BodyPartRecord part, MarkerAction action)
@@ -199,7 +200,8 @@ internal static class ExampleActions
         }
 
         RimWeaveLog.Message(message);
-        Messages.Message(message, MessageTypeDefOf.TaskCompletion, historical: false);
+        InspectionPresentation.PreserveRandomState(() =>
+            Messages.Message(message, MessageTypeDefOf.TaskCompletion, historical: false));
     }
 
     private static bool IsAvailable(Pawn pawn) =>
@@ -209,7 +211,8 @@ internal static class ExampleActions
     {
         string message = $"Example: {reason}";
         RimWeaveLog.Message(message);
-        Messages.Message(message, MessageTypeDefOf.RejectInput, historical: false);
+        InspectionPresentation.PreserveRandomState(() =>
+            Messages.Message(message, MessageTypeDefOf.RejectInput, historical: false));
     }
 }
 

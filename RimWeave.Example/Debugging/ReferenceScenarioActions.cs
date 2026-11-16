@@ -20,10 +20,10 @@ internal static class ReferenceScenarioActions
         DebugTools.curTool = null;
         var game = Current.Game;
         // The deferred selection is an explicit action; recheck mode, game and target when it executes.
-        Find.WindowStack.Add(new FloatMenu([
-            new FloatMenuOption($"Start reference scenario on {pawn.LabelShort}",
+        CommandSelection.Show([
+            ($"Start reference scenario on {pawn.LabelShort}",
                 () => Show(Execute(game, ReferenceScenarioAction.Start, pawn)))
-        ]));
+        ]);
     }
 
     [DebugAction("RimWeave Example", "Reference scenario: departure and return",
