@@ -33,6 +33,41 @@ public sealed class ContributionMetadataTests
         Assert.Null(metadata.Origin);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData(" example/claim ")]
+    public void AssignAttribution_InvalidClaimDoesNotAssignAnIdentity(string claim)
+    {
+        var metadata = new ContributionMetadata();
+        var origin = new ContributionOrigin(ContributionOriginType.Unknown);
+        metadata.DescribeOrigin(origin);
+
+        Assert.ThrowsAny<ArgumentException>(() =>
+            metadata.AssignAttribution(new ContributionId("example.mod", "first"), claim));
+
+        Assert.Null(metadata.Identity);
+        Assert.Null(metadata.ExclusiveResponsibility);
+        Assert.Same(origin, metadata.Origin);
+        Assert.Null(metadata.LoadError);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AssignAttribution_RefusesUnavailableMetadataWithoutReplacingItsDiagnostic(bool includeClaim)
+    {
+        var metadata = ContributionMetadata.Unavailable("Unsupported metadata version.");
+
+        Assert.Throws<InvalidOperationException>(() => metadata.AssignAttribution(
+            new ContributionId("example.mod", "first"), includeClaim ? "example/claim" : null));
+
+        Assert.Equal("Unsupported metadata version.", metadata.LoadError);
+        Assert.Null(metadata.Identity);
+        Assert.Null(metadata.ExclusiveResponsibility);
+        Assert.Null(metadata.Origin);
+    }
+
     [Fact]
     public void AssignIdentity_AcceptsTheSameValueAgain()
     {

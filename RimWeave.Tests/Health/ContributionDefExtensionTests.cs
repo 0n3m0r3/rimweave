@@ -194,6 +194,56 @@ public sealed class ContributionDefExtensionTests
         Assert.Empty(pawn.health.hediffSet.hediffs);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ConflictingCreation_PreservesExistingMetadataBeforeNativeCallbacks(bool conflictingIdentity)
+    {
+        var definition = Definition();
+        ((ContributionDefExtension)definition.modExtensions[0]).exclusiveResponsibility = "xml/claim";
+        definition.comps = [new HediffCompProperties { compClass = typeof(CreationObserver) }];
+        var effect = new ContributionHediff { def = definition, pawn = HealthTestPawns.CreateForGuardChecks() };
+        effect.Metadata.ClaimExclusiveResponsibility(conflictingIdentity ? "xml/claim" : "code/claim");
+        if (conflictingIdentity) effect.Metadata.AssignIdentity(new ContributionId("code.owner", "existing"));
+        var identity = effect.Metadata.Identity;
+        var claim = effect.Metadata.ExclusiveResponsibility;
+        var origin = new ContributionOrigin(ContributionOriginType.Unknown, "code:source");
+        effect.Metadata.DescribeOrigin(origin);
+
+        Assert.Throws<InvalidOperationException>(effect.PostMake);
+
+        Assert.Same(identity, effect.Metadata.Identity);
+        Assert.Equal(claim, effect.Metadata.ExclusiveResponsibility);
+        Assert.Same(origin, effect.Metadata.Origin);
+        Assert.Null(effect.Metadata.LoadError);
+        Assert.True(effect.comps is null || effect.comps.Count == 0);
+        Assert.Empty(effect.pawn.health.hediffSet.hediffs);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("code/claim")]
+    public void NativeCreation_PreservesCompatibleConstructorAttribution(string? declaredClaim)
+    {
+        using var game = new NativeGameTestScope();
+        game.Game.uniqueIDsManager = new UniqueIDsManager();
+        var definition = Definition();
+        definition.hediffClass = typeof(PreclaimedContribution);
+        definition.comps = [new HediffCompProperties { compClass = typeof(CreationObserver) }];
+        ((ContributionDefExtension)definition.modExtensions[0]).exclusiveResponsibility = declaredClaim;
+        var pawn = HealthTestPawns.CreateForGuardChecks();
+
+        var effect = Assert.IsType<PreclaimedContribution>(HediffMaker.MakeHediff(definition, pawn));
+
+        Assert.Equal(new ContributionId("example.owner", "Marker"), effect.Metadata.Identity);
+        Assert.Equal("code/claim", effect.Metadata.ExclusiveResponsibility);
+        Assert.Null(effect.Metadata.Origin);
+        var observer = Assert.IsType<CreationObserver>(Assert.Single(effect.comps));
+        Assert.Equal(effect.Metadata.Identity, observer.IdentityAtCreation);
+        Assert.Equal("code/claim", observer.ClaimAtCreation);
+        Assert.Empty(pawn.health.hediffSet.hediffs);
+    }
+
     [Fact]
     public void InvalidCreation_FailsBeforeNativeCallbacksAndRandomDraws()
     {
@@ -246,6 +296,11 @@ public sealed class ContributionDefExtensionTests
     }
 
     public sealed class DerivedContribution : ContributionHediff;
+
+    public sealed class PreclaimedContribution : ContributionHediff
+    {
+        public PreclaimedContribution() => Metadata.ClaimExclusiveResponsibility("code/claim");
+    }
 
     public sealed class CreationObserver : HediffComp
     {

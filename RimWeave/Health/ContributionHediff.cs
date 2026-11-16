@@ -21,18 +21,16 @@ public class ContributionHediff : HediffWithComps, IContribution
     /// <summary>Initializes optional XML attribution before native creation callbacks.</summary>
     /// <remarks>
     /// Use HediffMaker.MakeHediff for creation. Native Scribe loading does not call this method.
-    /// Subclasses must call base.PostMake; invalid declarations fail before native creation callbacks.
+    /// Subclasses must call base.PostMake. Invalid or conflicting declarations leave existing metadata
+    /// unchanged and fail before native creation callbacks. A missing declared claim preserves an existing claim.
+    /// This does not roll back constructor effects or changes made by later native callbacks.
     /// </remarks>
     /// <exception cref="InvalidOperationException">Declared attribution is invalid or conflicts with existing metadata.</exception>
     public override void PostMake()
     {
         var declaration = ContributionDefExtension.Read(def);
         if (declaration is not null)
-        {
-            Metadata.AssignIdentity(declaration.Identity!);
-            if (declaration.ExclusiveResponsibility is not null)
-                Metadata.ClaimExclusiveResponsibility(declaration.ExclusiveResponsibility);
-        }
+            Metadata.AssignAttribution(declaration.Identity!, declaration.ExclusiveResponsibility);
         base.PostMake();
     }
 

@@ -26,12 +26,7 @@ public sealed class ContributionMetadata
     /// <exception cref="InvalidOperationException">A different identity has already been assigned, or saved metadata is unavailable.</exception>
     public void AssignIdentity(ContributionId identity)
     {
-        ArgumentNullException.ThrowIfNull(identity);
-        EnsureAvailable();
-        if (Identity is not null && Identity != identity)
-            throw new InvalidOperationException("A contribution cannot be reassigned.");
-
-        Identity = identity;
+        AssignAttribution(identity, null);
     }
 
     /// <summary>Declares an exclusive claim without choosing a winner or applying an effect.</summary>
@@ -41,11 +36,7 @@ public sealed class ContributionMetadata
     /// <remarks>Equal claims are accepted again. Providers agree on key semantics and query scope.</remarks>
     public void ClaimExclusiveResponsibility(string responsibility)
     {
-        ValidateResponsibility(responsibility);
-        EnsureAvailable();
-        if (ExclusiveResponsibility is not null && ExclusiveResponsibility != responsibility)
-            throw new InvalidOperationException("An exclusive responsibility cannot be reassigned.");
-
+        EnsureCanClaim(responsibility);
         ExclusiveResponsibility = responsibility;
     }
 
@@ -62,6 +53,30 @@ public sealed class ContributionMetadata
             throw new InvalidOperationException("A declared origin cannot be reassigned.");
 
         Origin = origin;
+    }
+
+    // Validate the complete attribution before applying any of its fields.
+    // An omitted claim preserves the owner's existing claim.
+    internal void AssignAttribution(ContributionId identity, string? responsibility)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        EnsureAvailable();
+        if (Identity is not null && Identity != identity)
+            throw new InvalidOperationException("A contribution cannot be reassigned.");
+        if (responsibility is not null)
+            EnsureCanClaim(responsibility);
+
+        Identity = identity;
+        if (responsibility is not null)
+            ExclusiveResponsibility = responsibility;
+    }
+
+    private void EnsureCanClaim(string responsibility)
+    {
+        ValidateResponsibility(responsibility);
+        EnsureAvailable();
+        if (ExclusiveResponsibility is not null && ExclusiveResponsibility != responsibility)
+            throw new InvalidOperationException("An exclusive responsibility cannot be reassigned.");
     }
 
     internal static ContributionMetadata Unavailable(string error)
