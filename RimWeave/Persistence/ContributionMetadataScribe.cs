@@ -11,6 +11,8 @@ namespace RimWeave.Persistence;
 /// The owner calls ExposeData once in each native save/load phase and exposes Metadata to consumers.
 /// This adapter does not save the owner, resolve sources or apply effects. Unreadable metadata is
 /// retained as opaque XML text on subsequent saves; it requires an explicit future recovery policy.
+/// Unsupported XML nodes, including processing instructions, make the complete block unavailable.
+/// Comments and text/CDATA representations of supported scalar values are accepted.
 /// </remarks>
 public sealed class ContributionMetadataScribe : IExposable
 {
@@ -160,7 +162,7 @@ public sealed class ContributionMetadataScribe : IExposable
         {
             if (child is not XmlElement field)
             {
-                if (child is XmlComment || string.IsNullOrWhiteSpace(child.Value))
+                if (child is XmlComment || (IsTextNode(child) && string.IsNullOrWhiteSpace(child.Value)))
                     continue;
                 return "Unexpected content in the contribution metadata node.";
             }
@@ -168,7 +170,7 @@ public sealed class ContributionMetadataScribe : IExposable
             if (!FieldNames.Contains(field.Name) || !seen.Add(field.Name))
                 return "Unexpected or duplicate contribution metadata fields.";
 
-            if (field.ChildNodes.OfType<XmlElement>().Any()
+            if (field.ChildNodes.Cast<XmlNode>().Any(child => child is not XmlComment && !IsTextNode(child))
                 || field.Attributes.Cast<XmlAttribute>().Any(attribute =>
                     attribute.Name != "IsNull" || attribute.Value != "True")
                 || (field.HasAttribute("IsNull") && field.HasChildNodes))
@@ -177,6 +179,9 @@ public sealed class ContributionMetadataScribe : IExposable
 
         return null;
     }
+
+    private static bool IsTextNode(XmlNode node) => node.NodeType is
+        XmlNodeType.Text or XmlNodeType.CDATA or XmlNodeType.Whitespace or XmlNodeType.SignificantWhitespace;
 
     private void RetainUnreadable(string xml, string error)
     {

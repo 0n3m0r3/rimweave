@@ -121,6 +121,11 @@ public sealed class ContributionMetadataScribeTests
     [InlineData("nested-field")]
     [InlineData("unexpected-attribute")]
     [InlineData("empty-quarantine")]
+    [InlineData("root-processing-instruction")]
+    [InlineData("version-processing-instruction")]
+    [InlineData("encoding-processing-instruction")]
+    [InlineData("value-processing-instruction")]
+    [InlineData("empty-value-processing-instruction")]
     public void UnreadableMetadata_RemainsUnavailableAndRetainsItsPayloadAcrossSaves(string damage)
     {
         using var scribe = new ScribeTestScope();
@@ -141,6 +146,11 @@ public sealed class ContributionMetadataScribeTests
             case "duplicate-field": node.Add(Encoded("localId", "another")); break;
             case "nested-field": node.Element("localId")!.Add(new XElement("unexpected")); break;
             case "unexpected-attribute": node.Add(new XAttribute("future", "yes")); break;
+            case "root-processing-instruction": node.Add(new XProcessingInstruction("future", "")); break;
+            case "version-processing-instruction": node.Element("version")!.Add(new XProcessingInstruction("future", "value")); break;
+            case "encoding-processing-instruction": node.Element("encoding")!.Add(new XProcessingInstruction("future", "value")); break;
+            case "value-processing-instruction": node.Element("localId")!.Add(new XProcessingInstruction("future", "value")); break;
+            case "empty-value-processing-instruction": node.Element("localId")!.Add(new XProcessingInstruction("future", "")); break;
             case "empty-quarantine": node.Add(new XElement("unreadableXml", new XAttribute("IsNull", "True"))); break;
         }
 
@@ -159,6 +169,26 @@ public sealed class ContributionMetadataScribeTests
         Assert.Equal(retained, RetainedXml(scribe.Save(reloaded)));
         Assert.Throws<InvalidOperationException>(() =>
             reloaded.Metadata.AssignIdentity(new ContributionId("example.owner", "replacement")));
+    }
+
+    [Fact]
+    public void CommentsAndCdata_DoNotChangeValidScalarValues()
+    {
+        using var scribe = new ScribeTestScope();
+        var node = ValidNode();
+        node.Add(new XComment("Owner note"), Encoded("ownerId", "example.owner"), Encoded("localId", "marker"));
+        foreach (var field in node.Elements())
+        {
+            string value = field.Value;
+            field.ReplaceNodes(new XComment("Scalar note"), new XCData(value));
+        }
+
+        var loaded = LoadNode(scribe, node);
+        Assert.Null(loaded.Metadata.LoadError);
+        Assert.Equal(new ContributionId("example.owner", "marker"), loaded.Metadata.Identity);
+        var reloaded = scribe.RoundTrip(loaded);
+        Assert.Equal(loaded.Metadata.Identity, reloaded.Metadata.Identity);
+        Assert.Null(reloaded.Metadata.LoadError);
     }
 
     [Fact]
