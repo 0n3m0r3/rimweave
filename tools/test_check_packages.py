@@ -36,6 +36,14 @@ class PackageChecks(unittest.TestCase):
         after = {p.relative_to(self.root): p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
         self.assertEqual(before, after)
 
+    def test_repository_resources_match_the_package_contract(self):
+        repository = Path(__file__).resolve().parent.parent
+        for folder, _, _, definitions in PACKAGES:
+            resources = ["About/About.xml", *(f"Defs/HediffDefs/{name}" for name in definitions)]
+            for relative in resources:
+                (self.root / folder / relative).write_bytes((repository / folder / relative).read_bytes())
+        self.assertEqual([], check_packages(self.root))
+
     def test_missing_and_empty_files_are_reported_together(self):
         (self.root / "mod/About/About.xml").unlink()
         (self.root / "mod/Assemblies/RimWeave.dll").write_bytes(b"")
