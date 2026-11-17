@@ -19,12 +19,17 @@ public static class ContributionResolver
     /// <exception cref="InvalidOperationException">A candidate exposes null metadata.</exception>
     /// <remarks>Enumeration and provider exceptions propagate. A match does not reserve an instance.</remarks>
     public static ContributionLookupResult<T> Resolve<T>(
-        IEnumerable<T> candidates, ContributionId identity) where T : class, IContribution
+        IEnumerable<T> candidates, ContributionId identity) where T : class, IContribution =>
+        Resolve(candidates, identity, static candidate => candidate.Metadata);
+
+    // Native adapters bind authoritative metadata without dispatching a reimplemented interface.
+    internal static ContributionLookupResult<T> Resolve<T>(IEnumerable<T> candidates,
+        ContributionId identity, Func<T, ContributionMetadata> readMetadata) where T : class, IContribution
     {
         ArgumentNullException.ThrowIfNull(candidates);
         ArgumentNullException.ThrowIfNull(identity);
 
-        return ResolveWhere(candidates, metadata => metadata.Identity == identity);
+        return ResolveWhere(candidates, readMetadata, metadata => metadata.Identity == identity);
     }
 
     /// <summary>Finds explicit exclusive claimants without treating ordinary observers as owners.</summary>
@@ -37,16 +42,21 @@ public static class ContributionResolver
     /// <exception cref="InvalidOperationException">A candidate exposes null metadata.</exception>
     /// <remarks>This query neither discovers arbitrary effects nor infers their gameplay compatibility.</remarks>
     public static ContributionLookupResult<T> ResolveExclusiveClaim<T>(
-        IEnumerable<T> candidates, string responsibility) where T : class, IContribution
+        IEnumerable<T> candidates, string responsibility) where T : class, IContribution =>
+        ResolveExclusiveClaim(candidates, responsibility, static candidate => candidate.Metadata);
+
+    internal static ContributionLookupResult<T> ResolveExclusiveClaim<T>(IEnumerable<T> candidates,
+        string responsibility, Func<T, ContributionMetadata> readMetadata) where T : class, IContribution
     {
         ArgumentNullException.ThrowIfNull(candidates);
         ContributionMetadata.ValidateResponsibility(responsibility);
 
-        return ResolveWhere(candidates, metadata => metadata.ExclusiveResponsibility == responsibility);
+        return ResolveWhere(candidates, readMetadata, metadata => metadata.ExclusiveResponsibility == responsibility);
     }
 
     private static ContributionLookupResult<T> ResolveWhere<T>(
-        IEnumerable<T> candidates, Func<ContributionMetadata, bool> matchesQuery) where T : class, IContribution
+        IEnumerable<T> candidates, Func<T, ContributionMetadata> readMetadata,
+        Func<ContributionMetadata, bool> matchesQuery) where T : class, IContribution
     {
         var seen = new HashSet<T>(ReferenceEqualityComparer.Instance);
         var matches = new List<T>();
@@ -54,7 +64,7 @@ public static class ContributionResolver
         foreach (var candidate in candidates)
         {
             if (!seen.Add(candidate)) continue;
-            var metadata = ReadMetadata(candidate);
+            var metadata = ReadMetadata(candidate, readMetadata);
             if (metadata.LoadError is not null)
                 invalidCandidates.Add(candidate);
             else if (matchesQuery(metadata))
@@ -64,12 +74,12 @@ public static class ContributionResolver
         return new ContributionLookupResult<T>(matches, invalidCandidates);
     }
 
-    private static ContributionMetadata ReadMetadata<T>(T candidate) where T : class, IContribution
+    private static ContributionMetadata ReadMetadata<T>(T candidate, Func<T, ContributionMetadata> readMetadata) where T : class, IContribution
     {
         if (candidate is null)
             throw new ArgumentException("Candidates must not contain null contributions.", nameof(candidate));
 
-        return candidate.Metadata
+        return readMetadata(candidate)
             ?? throw new InvalidOperationException("A contribution must expose non-null metadata.");
     }
 }
