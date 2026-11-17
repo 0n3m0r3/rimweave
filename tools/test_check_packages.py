@@ -1,5 +1,8 @@
 from pathlib import Path
 import subprocess
+import hashlib
+import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -119,6 +122,50 @@ class PackageChecks(unittest.TestCase):
         (self.root / "mod").rename(self.root / "original")
         (self.root / "mod").symlink_to(self.root / "original", target_is_directory=True)
         self.assertTrue(any("symbolic link in package path" in x for x in check_packages(self.root)))
+
+    def json_command(self, root=None):
+        return subprocess.run([sys.executable, str(Path(__file__).with_name("check_packages.py")),
+                               str(root or self.root), "--json"], capture_output=True, text=True)
+
+    def test_json_inventory_is_portable_ordered_and_read_only(self):
+        before = {p.relative_to(self.root): p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
+        first = self.json_command()
+        self.assertEqual(0, first.returncode, first.stderr)
+        document = json.loads(first.stdout)
+        self.assertEqual(1, document["formatVersion"])
+        self.assertEqual("structure-only", document["validation"])
+        self.assertNotIn(str(self.root), first.stdout)
+        self.assertEqual(sorted(x["packageId"] for x in document["packages"]),
+                         [x["packageId"] for x in document["packages"]])
+        for package in document["packages"]:
+            self.assertEqual(sorted(x["path"] for x in package["files"]), [x["path"] for x in package["files"]])
+        with tempfile.TemporaryDirectory() as other:
+            copy = Path(other) / "another-location"
+            shutil.copytree(self.root, copy)
+            self.assertEqual(first.stdout, self.json_command(copy).stdout)
+        self.assertEqual(before, {p.relative_to(self.root): p.read_bytes() for p in self.root.rglob("*") if p.is_file()})
+
+    def test_json_fingerprints_actual_bytes_and_optional_files(self):
+        path = self.root / "mod/Assemblies/RimWeave.pdb"
+        path.write_bytes(b"symbols fixture")
+        first = json.loads(self.json_command().stdout)
+        package = next(x for x in first["packages"] if x["packageId"] == "rimweave.framework")
+        entry = next(x for x in package["files"] if x["path"] == "Assemblies/RimWeave.pdb")
+        self.assertEqual({"path": "Assemblies/RimWeave.pdb", "bytes": 15,
+                          "sha256": hashlib.sha256(b"symbols fixture").hexdigest()}, entry)
+        path.write_bytes(b"changed fixture")
+        second = json.loads(self.json_command().stdout)
+        changed = next(x for x in second["packages"] if x["packageId"] == "rimweave.framework")
+        self.assertNotEqual(package, changed)
+        self.assertEqual([x for x in first["packages"] if x is not package],
+                         [x for x in second["packages"] if x is not changed])
+
+    def test_json_is_not_emitted_for_invalid_packages(self):
+        (self.root / "mod/Assemblies/RimWeave.dll").unlink()
+        result = self.json_command()
+        self.assertEqual(1, result.returncode)
+        self.assertEqual("", result.stdout)
+        self.assertIn("required file missing", result.stderr)
 
     def test_cli_reports_failure_and_success(self):
         command = [sys.executable, str(Path(__file__).with_name("check_packages.py")), str(self.root)]

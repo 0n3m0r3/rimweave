@@ -36,7 +36,7 @@ After building, check the installable folders:
 python3 tools/check_packages.py
 ```
 
-This checks package structure, not game compatibility or the selected build configuration.
+This checks package structure, not game compatibility or the selected build configuration. Add `--json` to print a portable inventory of file sizes and SHA-256 digests; keep builds and file copies stopped during the check.
 
 Copy the complete `mod/` directory into its own folder under RimWorld's `Mods/` directory, then enable **RimWeave Framework** in the game's mod list and restart the game.
 
