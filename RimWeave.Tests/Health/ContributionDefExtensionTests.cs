@@ -128,6 +128,27 @@ public sealed class ContributionDefExtensionTests
     }
 
     [Theory]
+    [InlineData(typeof(PrivateConstructorContribution))]
+    [InlineData(typeof(ParameterizedContribution))]
+    public void MissingPublicDefaultConstructor_IsDiagnosedBeforeNativeCreation(Type effectType)
+    {
+        var definition = Definition();
+        definition.hediffClass = effectType;
+        var pawn = HealthTestPawns.CreateForGuardChecks();
+        var before = RandState();
+
+        Assert.Throws<MissingMethodException>(() => HediffMaker.MakeHediff(definition, pawn));
+        var error = Assert.Throws<InvalidOperationException>(() => ContributionDefExtension.Read(definition));
+
+        Assert.Contains("public parameterless constructor", error.Message);
+        Assert.Contains("DeclarationTest", error.Message);
+        Assert.Contains("example.provider", error.Message);
+        Assert.Equal(error.Message, Assert.Single(definition.modExtensions[0].ConfigErrors()));
+        Assert.Equal(before, RandState());
+        Assert.Empty(pawn.health.hediffSet.hediffs);
+    }
+
+    [Theory]
     [InlineData(typeof(ContributionHediff))]
     [InlineData(typeof(DerivedContribution))]
     [InlineData(typeof(GenericContribution<int>))]
@@ -334,6 +355,16 @@ public sealed class ContributionDefExtensionTests
     public sealed class ThrowingConstructorContribution : ContributionHediff
     {
         public ThrowingConstructorContribution() => throw new InvalidOperationException("Inspection must not instantiate this type.");
+    }
+
+    public sealed class PrivateConstructorContribution : ContributionHediff
+    {
+        private PrivateConstructorContribution() => throw new InvalidOperationException("Must not run.");
+    }
+
+    public sealed class ParameterizedContribution : ContributionHediff
+    {
+        public ParameterizedContribution(int value) => throw new InvalidOperationException("Must not run.");
     }
 
     public sealed class DerivedContribution : ContributionHediff;
