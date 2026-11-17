@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3.mtp-off" Version="4.0.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Test the original sources without distributing a second framework assembly. -->
+    <Compile Include="../RimWeave/Contributions/*.cs" Link="Production/Contributions/%(Filename)%(Extension)" />
+    <Compile Include="../RimWeave/Logging/LogMessageFormatter.cs" Link="Production/LogMessageFormatter.cs" />
+    <Compile Include="../RimWeave.Tests/Contributions/*.cs" Link="Tests/Contributions/%(Filename)%(Extension)" />
+    <Compile Include="../RimWeave.Tests/Logging/LogMessageFormatterTests.cs" Link="Tests/LogMessageFormatterTests.cs" />
+  </ItemGroup>
+</Project>

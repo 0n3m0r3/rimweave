@@ -1,4 +1,4 @@
-name: Validate package sources
+name: Validate sources
 
 on:
   push:
@@ -18,3 +18,15 @@ jobs:
           persist-credentials: false
       - name: Check package tooling and source resources without game assemblies
         run: python3 -m unittest discover -s tools -p 'test_*.py' -v
+
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.114'
+      - run: dotnet test RimWeave.Contracts.Tests/RimWeave.Contracts.Tests.csproj --configuration Release

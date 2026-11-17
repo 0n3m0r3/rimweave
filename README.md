@@ -20,6 +20,14 @@ Edit `RimWeave.local.props` and replace the placeholder with your game installat
 dotnet build RimWeave.sln --configuration Debug
 ```
 
+## Test shared contracts without the game
+
+```bash
+dotnet test RimWeave.Contracts.Tests/RimWeave.Contracts.Tests.csproj --configuration Release
+```
+
+This test host links the production contribution contracts and log formatter with their existing tests. It needs neither RimWorld assemblies nor `RimWeave.local.props`. GitHub runs this subset and the package-source checks. It does not compile the complete mod or validate native integration; run the full solution tests and relevant game scenarios locally.
+
 ## Run in RimWorld
 
 After building, check the installable folders:
