@@ -80,6 +80,31 @@ public sealed class HealthContributionReportTests
         Assert.DoesNotContain("Exclusive lookup: conflict", report);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Create_CountsDistinctNativeInstancesRatherThanRepeatedReportViews(bool addCompetitor)
+    {
+        var fixture = new HealthFixture();
+        var identity = new ContributionId("example.mod", "repeated");
+        var effect = fixture.Add<EqualContribution>(351, identity, fixture.Left);
+        effect.Metadata.ClaimExclusiveResponsibility("example/claim");
+        fixture.Pawn.health.hediffSet.hediffs.Add(effect);
+        if (addCompetitor)
+            fixture.Add<EqualContribution>(352, identity, fixture.Left)
+                .Metadata.ClaimExclusiveResponsibility("example/claim");
+        var before = fixture.Pawn.health.hediffSet.hediffs.ToArray();
+
+        var report = HealthContributionReport.Create(fixture.Pawn);
+
+        Assert.Contains(addCompetitor ? "Identity lookup: ambiguous (2 matches)" : "Identity lookup: unique (1 match)", report);
+        Assert.Contains(addCompetitor ? "Exclusive lookup: conflict (2 explicit claimants)" : "Exclusive lookup: single claimant", report);
+        Assert.DoesNotContain("3 matches", report);
+        Assert.DoesNotContain("3 explicit claimants", report);
+        Assert.Equal(before, fixture.Pawn.health.hediffSet.hediffs);
+        if (!addCompetitor) Assert.Contains("0 known identity ambiguities; 0 known exclusive-claim conflicts", report);
+    }
+
     [Fact]
     public void Create_DoesNotConfuseEqualLocalNamesOwnedByDifferentProviders()
     {
@@ -338,6 +363,13 @@ public sealed class HealthContributionReportTests
             Pawn.health.hediffSet.hediffs.Add(effect);
             return effect;
         }
+    }
+
+    private sealed class EqualContribution : ContributionHediff
+    {
+        public EqualContribution() { }
+        public override bool Equals(object? other) => other is EqualContribution;
+        public override int GetHashCode() => 0;
     }
 
     private sealed class HostileContribution : ContributionHediff, IContribution

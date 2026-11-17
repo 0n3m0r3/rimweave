@@ -35,9 +35,9 @@ internal static class HealthContributionReport
         foreach (var scope in scopes)
         {
             foreach (var identity in scope.Contributions.Select(entry => entry.Metadata.Identity).OfType<ContributionId>().Distinct())
-                if (ContributionResolver.Resolve(scope.Contributions, identity).Matches.Count > 1) ambiguous++;
+                if (ContributionResolver.Resolve(scope.Contributions, identity, static effect => effect.Metadata).Matches.Count > 1) ambiguous++;
             foreach (var claim in scope.Contributions.Select(entry => entry.Metadata.ExclusiveResponsibility).OfType<string>().Distinct(StringComparer.Ordinal))
-                if (ContributionResolver.ResolveExclusiveClaim(scope.Contributions, claim).Matches.Count > 1) conflicts++;
+                if (ContributionResolver.ResolveExclusiveClaim(scope.Contributions, claim, static effect => effect.Metadata).Matches.Count > 1) conflicts++;
         }
 
         var report = new StringBuilder();
@@ -90,10 +90,10 @@ internal static class HealthContributionReport
                         block.AppendLine($"Exclusive claim: {Field(metadata.ExclusiveResponsibility)}");
                         if (metadata.Identity is { } identity)
                             block.AppendLine("Identity lookup: " + Lookup(
-                                ContributionResolver.Resolve(scope.Contributions, identity), limited, exclusive: false));
+                                ContributionResolver.Resolve(scope.Contributions, identity, static effect => effect.Metadata), limited, exclusive: false));
                         if (metadata.ExclusiveResponsibility is { } claim)
                             block.AppendLine("Exclusive lookup: " + Lookup(
-                                ContributionResolver.ResolveExclusiveClaim(scope.Contributions, claim), limited, exclusive: true));
+                                ContributionResolver.ResolveExclusiveClaim(scope.Contributions, claim, static effect => effect.Metadata), limited, exclusive: true));
                     }
                 }
                 if (!Append(report, block.ToString())) return report.ToString();
@@ -102,7 +102,7 @@ internal static class HealthContributionReport
         return report.ToString();
     }
 
-    private static string Lookup(ContributionLookupResult<ContributionView> result, bool limited, bool exclusive)
+    private static string Lookup(ContributionLookupResult<ContributionHediff> result, bool limited, bool exclusive)
     {
         int count = result.Matches.Count;
         string noun = exclusive ? "claimants" : "matches";
@@ -122,8 +122,8 @@ internal static class HealthContributionReport
         };
     }
 
-    private static string MatchingEffects(ContributionLookupResult<ContributionView> result) => result.Matches.Count > 1
-        ? "\n  Matching effects: " + string.Join(", ", result.Matches.Select(entry => entry.NativeIdentity))
+    private static string MatchingEffects(ContributionLookupResult<ContributionHediff> result) => result.Matches.Count > 1
+        ? "\n  Matching effects: " + string.Join(", ", result.Matches.Select(entry => entry.GetUniqueLoadID()))
         : "";
 
     private static string ScopeName(BodyPartRecord? part, int number) => part is null
@@ -137,14 +137,8 @@ internal static class HealthContributionReport
     {
         internal BodyPartRecord? Part { get; } = part;
         internal Hediff[] Effects { get; } = effects;
-        internal ContributionView[] Contributions { get; } = effects.OfType<ContributionHediff>()
-            .Select(effect => new ContributionView(effect)).ToArray();
+        // Preserve native instance identity for the common resolver; bind base metadata at each query.
+        internal ContributionHediff[] Contributions { get; } = effects.OfType<ContributionHediff>().ToArray();
     }
 
-    // Only these local, sealed candidates reach the common resolver; no provider getter is invoked.
-    private sealed class ContributionView(ContributionHediff effect) : IContribution
-    {
-        public ContributionMetadata Metadata { get; } = effect.Metadata;
-        internal string NativeIdentity { get; } = effect.GetUniqueLoadID();
-    }
 }
