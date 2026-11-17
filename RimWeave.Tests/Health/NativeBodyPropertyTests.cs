@@ -1,6 +1,5 @@
 using System.Reflection;
 using RimWeave.Tests.Helpers;
-using RimWorld;
 using Verse;
 using Xunit;
 
@@ -16,7 +15,7 @@ public sealed class NativeBodyPropertyTests
     public void NativeSizeAndHealthScale_UseIndependentRaceAndLifeStageFactors(
         float size, float sizeFactor, float health, float healthFactor, float expectedSize, float expectedHealth)
     {
-        var pawn = Create(size, sizeFactor, health, healthFactor);
+        var pawn = NativeHealthReadPawns.Create(size, sizeFactor, health, healthFactor);
         Assert.Equal(expectedSize, pawn.BodySize);
         Assert.Equal(expectedHealth, pawn.HealthScale);
     }
@@ -24,7 +23,7 @@ public sealed class NativeBodyPropertyTests
     [Fact]
     public void NativeRead_DoesNotReinterpretHealthEffectSeverityOrChangeRandomState()
     {
-        var pawn = Create(2f, 0.25f, 3f, 0.5f);
+        var pawn = NativeHealthReadPawns.Create(2f, 0.25f, 3f, 0.5f);
         var effect = new Hediff { pawn = pawn, def = new HediffDef { maxSeverity = 100f }, Severity = 9f };
         pawn.health.hediffSet.hediffs.Add(effect);
         var random = typeof(Rand).GetProperty("StateCompressed", BindingFlags.NonPublic | BindingFlags.Static)!;
@@ -43,27 +42,11 @@ public sealed class NativeBodyPropertyTests
     [Fact]
     public void RetainedValuesRemainObservationsWhenTheNativeDefinitionChanges()
     {
-        var pawn = Create(2f, 0.25f, 3f, 0.5f);
+        var pawn = NativeHealthReadPawns.Create(2f, 0.25f, 3f, 0.5f);
         var observed = (Size: pawn.BodySize, HealthScale: pawn.HealthScale);
         pawn.ageTracker.CurLifeStage.bodySizeFactor = 0.75f;
         Assert.Equal(0.5f, observed.Size);
         Assert.Equal(1.5f, pawn.BodySize);
         Assert.Equal(observed.HealthScale, pawn.HealthScale);
-    }
-
-    private static Pawn Create(float size, float sizeFactor, float health, float healthFactor)
-    {
-        var pawn = HealthTestPawns.CreateForGuardChecks();
-        pawn.RaceProps.baseBodySize = size;
-        pawn.RaceProps.baseHealthScale = health;
-        pawn.RaceProps.lifeStageAges = [new LifeStageAge
-        {
-            def = new LifeStageDef { bodySizeFactor = sizeFactor, healthScaleFactor = healthFactor }
-        }];
-        pawn.ageTracker = new Pawn_AgeTracker(pawn);
-        // Model completed native initialization; recalculating a life stage invokes unrelated lifecycle hooks.
-        typeof(Pawn_AgeTracker).GetField("cachedLifeStageIndex", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(pawn.ageTracker, 0);
-        return pawn;
     }
 }
