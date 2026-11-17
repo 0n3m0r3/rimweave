@@ -15,6 +15,31 @@ PACKAGES = (
 )
 
 
+# These technical examples are explicitly applied by developer commands only.
+EXAMPLE_DEFINITIONS = {
+    ("rimweave.example", "CompositionMarker.xml"): ("RimWeave_CompositionMedical", "RimWeave.Health.ContributionHediff"),
+    ("rimweave.example", "ExampleMarker.xml"): ("RimWeave_ExampleMarker", "Verse.HediffWithComps"),
+    ("rimweave.example", "ReferenceMarker.xml"): ("RimWeave_ReferenceMarker", "RimWeave.Health.ContributionHediff"),
+    ("rimweave.example.peer", "CompositionMarker.xml"): ("RimWeave_CompositionTemporary", "RimWeave.Health.ContributionHediff"),
+}
+
+
+def check_example_definition(document, identity, filename, label):
+    if document.tag != "Defs":
+        return [f"{label}: expected Defs root"]
+    if len(document) != 1 or document[0].tag != "HediffDef":
+        return [f"{label}: expected exactly one HediffDef"]
+    if document.attrib or document[0].attrib:
+        return [f"{label}: expected an unconditional concrete definition without XML attributes"]
+    name, effect_class = EXAMPLE_DEFINITIONS[identity, filename]
+    expected = {"defName": name, "hediffClass": effect_class,
+                **{field: "false" for field in
+                   ("isBad", "makesAlert", "everCurableByItem", "tendable", "scenarioCanAdd")}}
+    return [f"{label}: expected one {field} with value {value!r}"
+            for field, value in expected.items()
+            if [node.text for node in document[0].findall(field)] != [value]]
+
+
 def check_packages(repository):
     """Return all structural errors without loading assemblies or changing files."""
     errors = []
@@ -78,8 +103,8 @@ def check_packages(repository):
                         for field in ("name", "description"):
                             if not (document.findtext(field) or "").strip():
                                 errors.append(f"{label}: missing {field}")
-                    elif relative.startswith("Defs/") and document.tag != "Defs":
-                        errors.append(f"{label}: expected Defs root")
+                    elif relative.startswith("Defs/"):
+                        errors.extend(check_example_definition(document, identity, path.name, label))
         for missing in sorted(required - found):
             errors.append(f"{folder}/{missing}: required file missing")
     return errors

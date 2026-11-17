@@ -28,7 +28,7 @@ class PackageChecks(unittest.TestCase):
             for name in definitions:
                 path = root / "Defs/HediffDefs" / name
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text("<Defs />")
+                path.write_bytes((Path(__file__).resolve().parent.parent / folder / "Defs/HediffDefs" / name).read_bytes())
 
     def test_accepts_complete_packages_without_writing(self):
         before = {p.relative_to(self.root): p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
@@ -36,12 +36,11 @@ class PackageChecks(unittest.TestCase):
         after = {p.relative_to(self.root): p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
         self.assertEqual(before, after)
 
-    def test_repository_resources_match_the_package_contract(self):
+    def test_repository_manifests_match_the_package_contract(self):
         repository = Path(__file__).resolve().parent.parent
-        for folder, _, _, definitions in PACKAGES:
-            resources = ["About/About.xml", *(f"Defs/HediffDefs/{name}" for name in definitions)]
-            for relative in resources:
-                (self.root / folder / relative).write_bytes((repository / folder / relative).read_bytes())
+        for folder, _, _, _ in PACKAGES:
+            (self.root / folder / "About/About.xml").write_bytes(
+                (repository / folder / "About/About.xml").read_bytes())
         self.assertEqual([], check_packages(self.root))
 
     def test_missing_and_empty_files_are_reported_together(self):
@@ -80,6 +79,30 @@ class PackageChecks(unittest.TestCase):
             with self.subTest(content=content):
                 path.write_text(content)
                 self.assertTrue(any(diagnostic in x for x in check_packages(self.root)))
+
+    def test_example_definition_identity_and_count_are_checked(self):
+        path = self.root / "examples/RimWeave.Example/Defs/HediffDefs/ExampleMarker.xml"
+        original = path.read_text()
+        cases = ["<Defs />", original.replace("<HediffDef>", '<HediffDef Abstract="true">'),
+                 original.replace("<Defs>", '<Defs MayRequire="absent.mod">'), original.replace("RimWeave_ExampleMarker", "WrongName"),
+                 original.replace("Verse.HediffWithComps", "Wrong.Class"),
+                 original.replace("</Defs>", "<HediffDef><defName>Extra</defName></HediffDef></Defs>")]
+        for content in cases:
+            with self.subTest(content=content):
+                path.write_text(content)
+                self.assertTrue(any("ExampleMarker.xml:" in x for x in check_packages(self.root)))
+        path.write_text(original)
+
+    def test_example_neutrality_fields_must_be_explicit_and_unique(self):
+        path = self.root / "examples/RimWeave.Example.Peer/Defs/HediffDefs/CompositionMarker.xml"
+        original = path.read_text()
+        for field in ["isBad", "makesAlert", "everCurableByItem", "tendable", "scenarioCanAdd"]:
+            node = f"<{field}>false</{field}>"
+            for replacement in ["", f"<{field}>true</{field}>", node * 2]:
+                with self.subTest(field=field, replacement=replacement):
+                    path.write_text(original.replace(node, replacement))
+                    self.assertTrue(any(field in x for x in check_packages(self.root)))
+        path.write_text(original)
 
     def test_file_and_directory_links_are_not_followed(self):
         for relative, directory in [("mod/Assemblies/alias.dll", False), ("mod/foreign", True)]:
