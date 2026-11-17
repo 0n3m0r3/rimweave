@@ -6,6 +6,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 
 from check_packages import PACKAGES, check_packages
 
@@ -106,6 +107,27 @@ class PackageChecks(unittest.TestCase):
                     path.write_text(original.replace(node, replacement))
                     self.assertTrue(any(field in x for x in check_packages(self.root)))
         path.write_text(original)
+
+    def test_required_example_values_reject_attributes_and_nested_elements(self):
+        path = self.root / "examples/RimWeave.Example/Defs/HediffDefs/ExampleMarker.xml"
+        original = path.read_text()
+        fields = ["defName", "hediffClass", "isBad", "makesAlert", "everCurableByItem", "tendable", "scenarioCanAdd"]
+        for field in fields:
+            for shape in ("attribute", "child"):
+                with self.subTest(field=field, shape=shape):
+                    document = ET.fromstring(original)
+                    node = document[0].find(field)
+                    if shape == "attribute":
+                        node.set("MayRequire", "absent.example")
+                    else:
+                        ET.SubElement(node, "unexpected")
+                    path.write_text(ET.tostring(document, encoding="unicode"))
+                    before = path.read_bytes()
+                    errors = check_packages(self.root)
+                    self.assertTrue(any("ExampleMarker.xml:" in error and field in error for error in errors))
+                    self.assertEqual(before, path.read_bytes())
+        path.write_text(original)
+        self.assertEqual([], check_packages(self.root))
 
     def test_file_and_directory_links_are_not_followed(self):
         for relative, directory in [("mod/Assemblies/alias.dll", False), ("mod/foreign", True)]:

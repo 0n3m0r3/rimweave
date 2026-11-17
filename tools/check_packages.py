@@ -37,9 +37,14 @@ def check_example_definition(document, identity, filename, label):
     expected = {"defName": name, "hediffClass": effect_class,
                 **{field: "false" for field in
                    ("isBad", "makesAlert", "everCurableByItem", "tendable", "scenarioCanAdd")}}
-    return [f"{label}: expected one {field} with value {value!r}"
-            for field, value in expected.items()
-            if [node.text for node in document[0].findall(field)] != [value]]
+    errors = []
+    for field, value in expected.items():
+        nodes = document[0].findall(field)
+        if (len(nodes) != 1 or nodes[0].attrib or len(nodes[0])
+                or nodes[0].text != value):
+            errors.append(f"{label}: expected one scalar {field} with value {value!r} "
+                          "and no attributes or nested elements")
+    return errors
 
 
 def fingerprint(path):
