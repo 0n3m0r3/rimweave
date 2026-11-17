@@ -268,6 +268,107 @@ public sealed class ContributionResolverTests
         Assert.Same(valid, Assert.Single(unaffected.Matches));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Queries_CountEachInstanceOnceAcrossOverlappingCollections(bool exclusiveClaim)
+    {
+        var contribution = new CountingContribution(new ContributionMetadata());
+        contribution.Value.AssignIdentity(LockId);
+        contribution.Value.ClaimExclusiveResponsibility("example/property");
+        int enumerations = 0;
+        IEnumerable<IContribution> Candidates()
+        {
+            enumerations++;
+            yield return contribution;
+            yield return new ActivityContribution();
+            yield return contribution;
+        }
+
+        var result = Query(Candidates(), exclusiveClaim);
+
+        Assert.Equal(ContributionLookupStatus.Found, result.Status);
+        Assert.Same(contribution, Assert.Single(result.Matches));
+        Assert.Equal(1, contribution.Reads);
+        Assert.Equal(1, enumerations);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Queries_KeepDistinctValueEqualInstancesAmbiguous(bool exclusiveClaim)
+    {
+        var first = new CountingContribution(new ContributionMetadata());
+        var second = new CountingContribution(new ContributionMetadata());
+        foreach (var contribution in new[] { first, second })
+        {
+            contribution.Value.AssignIdentity(LockId);
+            contribution.Value.ClaimExclusiveResponsibility("example/property");
+        }
+        Assert.Equal(first, second);
+
+        var result = Query(new IContribution[] { first, second, first, second }, exclusiveClaim);
+
+        Assert.Equal(ContributionLookupStatus.Ambiguous, result.Status);
+        Assert.Equal(2, result.Matches.Count);
+        Assert.Same(first, result.Matches[0]);
+        Assert.Same(second, result.Matches[1]);
+        Assert.Equal(1, first.Reads);
+        Assert.Equal(1, second.Reads);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Queries_KeepEachUnavailableInstanceOnceWithoutHidingValidMatches(bool exclusiveClaim)
+    {
+        var unavailable = new CountingContribution(ContributionMetadata.Unavailable("Unknown version."));
+        var valid = new LockContribution(LockId);
+        valid.Metadata.ClaimExclusiveResponsibility("example/property");
+        var result = Query(new IContribution[] { unavailable, valid, unavailable, valid }, exclusiveClaim);
+
+        Assert.Equal(ContributionLookupStatus.InvalidMetadata, result.Status);
+        Assert.Same(unavailable, Assert.Single(result.InvalidCandidates));
+        Assert.Same(valid, Assert.Single(result.Matches));
+        Assert.Equal(1, unavailable.Reads);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Queries_PropagateProviderFailureAndDisposeTheSource(bool exclusiveClaim)
+    {
+        var failure = new InvalidOperationException("Provider failure.");
+        bool disposed = false;
+        IEnumerable<IContribution> Candidates()
+        {
+            try { yield return new ThrowingContribution(failure); }
+            finally { disposed = true; }
+        }
+
+        Assert.Same(failure, Assert.Throws<InvalidOperationException>(() => Query(Candidates(), exclusiveClaim)));
+        Assert.True(disposed);
+    }
+
+    private static ContributionLookupResult<IContribution> Query(IEnumerable<IContribution> candidates, bool exclusiveClaim) =>
+        exclusiveClaim
+            ? ContributionResolver.ResolveExclusiveClaim(candidates, "example/property")
+            : ContributionResolver.Resolve(candidates, LockId);
+
+    private sealed class CountingContribution(ContributionMetadata value) : IContribution
+    {
+        public ContributionMetadata Value { get; } = value;
+        public int Reads { get; private set; }
+        public ContributionMetadata Metadata { get { Reads++; return Value; } }
+        public override bool Equals(object? obj) => obj is CountingContribution;
+        public override int GetHashCode() => throw new InvalidOperationException("Provider hashing must not be used.");
+    }
+
+    private sealed class ThrowingContribution(Exception failure) : IContribution
+    {
+        public ContributionMetadata Metadata => throw failure;
+    }
+
     // These are provider-owned records, not implementations of native locking or activities.
     private sealed class LockContribution : IContribution
     {

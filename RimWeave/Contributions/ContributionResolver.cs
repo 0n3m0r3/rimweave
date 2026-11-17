@@ -3,7 +3,9 @@ namespace RimWeave.Contributions;
 /// <summary>Resolves contributions in a caller-supplied scope without keeping a registry.</summary>
 /// <remarks>
 /// The caller selects the authoritative collection and target scope. Candidates are enumerated
-/// once per query; their order never selects a winner. Use the owning domain's mutation thread.
+/// once per query. Each distinct instance is read and counted once, using reference identity rather
+/// than provider equality. Distinct instances remain separate even when their metadata matches.
+/// Their order never selects a winner. Use the owning domain's mutation thread.
 /// </remarks>
 public static class ContributionResolver
 {
@@ -46,10 +48,12 @@ public static class ContributionResolver
     private static ContributionLookupResult<T> ResolveWhere<T>(
         IEnumerable<T> candidates, Func<ContributionMetadata, bool> matchesQuery) where T : class, IContribution
     {
+        var seen = new HashSet<T>(ReferenceEqualityComparer.Instance);
         var matches = new List<T>();
         var invalidCandidates = new List<T>();
         foreach (var candidate in candidates)
         {
+            if (!seen.Add(candidate)) continue;
             var metadata = ReadMetadata(candidate);
             if (metadata.LoadError is not null)
                 invalidCandidates.Add(candidate);
