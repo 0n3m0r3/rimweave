@@ -5,7 +5,7 @@ namespace RimWeave.Health;
 
 /// <summary>Declares initial attribution in a cooperating health effect's native XML definition.</summary>
 /// <remarks>
-/// Add at most one instance to a HediffDef using ContributionHediff or a subclass.
+/// Add at most one instance to a HediffDef using ContributionHediff or a concrete, closed subclass.
 /// Declarations affect newly created instances only; saved metadata remains authoritative.
 /// Definitions may share an identity. This declaration neither registers nor applies an effect.
 /// </remarks>
@@ -73,6 +73,9 @@ public sealed class ContributionDefExtension : DefModExtension
         if (definition is not HediffDef health || health.hediffClass is null
             || !typeof(ContributionHediff).IsAssignableFrom(health.hediffClass))
             throw Invalid(definition, "The definition must use ContributionHediff or a subclass.");
+
+        if (health.hediffClass.IsAbstract || health.hediffClass.ContainsGenericParameters)
+            throw Invalid(definition, "The contribution class must be a concrete, closed type.");
 
         var declaration = declarations[0];
         try

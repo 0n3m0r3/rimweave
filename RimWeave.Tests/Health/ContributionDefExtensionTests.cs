@@ -109,6 +109,40 @@ public sealed class ContributionDefExtensionTests
         Assert.Throws<InvalidOperationException>(() => ContributionDefExtension.Read(definition));
     }
 
+    [Theory]
+    [InlineData(typeof(AbstractContribution))]
+    [InlineData(typeof(GenericContribution<>))]
+    public void UncreatableClasses_AreDiagnosedBeforeInstantiation(Type effectType)
+    {
+        var definition = Definition();
+        definition.hediffClass = effectType;
+        var before = RandState();
+
+        var error = Assert.Throws<InvalidOperationException>(() => ContributionDefExtension.Read(definition));
+
+        Assert.Contains("concrete, closed type", error.Message);
+        Assert.Contains("DeclarationTest", error.Message);
+        Assert.Contains("example.provider", error.Message);
+        Assert.Equal(error.Message, Assert.Single(definition.modExtensions[0].ConfigErrors()));
+        Assert.Equal(before, RandState());
+    }
+
+    [Theory]
+    [InlineData(typeof(ContributionHediff))]
+    [InlineData(typeof(DerivedContribution))]
+    [InlineData(typeof(GenericContribution<int>))]
+    [InlineData(typeof(ThrowingConstructorContribution))]
+    public void ConcreteClasses_AreInspectedWithoutExecutingConstructors(Type effectType)
+    {
+        var definition = Definition();
+        definition.hediffClass = effectType;
+        var before = RandState();
+
+        Assert.NotNull(ContributionDefExtension.Read(definition));
+        Assert.Empty(definition.modExtensions[0].ConfigErrors());
+        Assert.Equal(before, RandState());
+    }
+
     [Fact]
     public void NonHealthDefinition_IsDiagnosedByTheNativeExtensionHook()
     {
@@ -293,6 +327,13 @@ public sealed class ContributionDefExtensionTests
         };
         definition.ResolveReferences();
         return definition;
+    }
+
+    public abstract class AbstractContribution : ContributionHediff;
+    public sealed class GenericContribution<T> : ContributionHediff;
+    public sealed class ThrowingConstructorContribution : ContributionHediff
+    {
+        public ThrowingConstructorContribution() => throw new InvalidOperationException("Inspection must not instantiate this type.");
     }
 
     public sealed class DerivedContribution : ContributionHediff;
