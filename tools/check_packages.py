@@ -58,82 +58,92 @@ def check_packages(repository):
     return inspect_packages(repository)[0]
 
 
+def package_files(assembly, definitions):
+    required = {"About/About.xml", f"Assemblies/{assembly}.dll"}
+    required.update(f"Defs/HediffDefs/{name}" for name in definitions)
+    return required, required | {f"Assemblies/{assembly}.pdb", f"Assemblies/{assembly}.xml"}
+
+
+def inspect_package(root, package, include_fingerprints=False):
+    """Check one explicit mod folder using the same contract as the repository."""
+    folder, identity, assembly, definitions = package
+    errors = []
+    inventory = []
+    required, allowed = package_files(assembly, definitions)
+    found = set()
+    if any(path.is_symlink() for path in (root, *root.parents)):
+        errors.append(f"{folder}: symbolic link in package path")
+        return errors, {"packageId": identity, "files": []}
+    if not root.is_dir():
+        errors.append(f"{folder}: package directory missing")
+        return errors, {"packageId": identity, "files": []}
+    def walk_error(error):
+        raise error
+
+    for current, directories, files in os.walk(root, followlinks=False, onerror=walk_error):
+        for name in list(directories):
+            path = Path(current) / name
+            if path.is_symlink():
+                errors.append(f"{folder}/{path.relative_to(root)}: symbolic link")
+                directories.remove(name)
+        for name in files:
+            path = Path(current) / name
+            relative = path.relative_to(root).as_posix()
+            label = f"{folder}/{relative}"
+            if path.is_symlink():
+                errors.append(f"{label}: symbolic link")
+                continue
+            if not path.is_file():
+                errors.append(f"{label}: not a regular file")
+                continue
+            if relative not in allowed:
+                errors.append(f"{label}: unexpected file")
+                continue
+            found.add(relative)
+            if path.stat().st_size == 0:
+                errors.append(f"{label}: empty file")
+                continue
+            if include_fingerprints:
+                inventory.append({"path": relative, **fingerprint(path)})
+            if path.suffix == ".xml":
+                try:
+                    document = ET.parse(path).getroot()
+                except (ET.ParseError, OSError) as error:
+                    errors.append(f"{label}: unreadable XML ({error})")
+                    continue
+                if relative == "About/About.xml":
+                    expected = {
+                        "packageId": [identity],
+                        "supportedVersions/li": ["1.7"],
+                        "author": ["RimWeave Framework"],
+                        "modDependencies/li/packageId": [] if identity == "rimweave.framework" else ["rimweave.framework"],
+                        "loadAfter/li": [] if identity == "rimweave.framework" else ["rimweave.framework"],
+                    }
+                    if document.tag != "ModMetaData":
+                        errors.append(f"{label}: expected ModMetaData root")
+                    for field, values in expected.items():
+                        if [node.text for node in document.findall(field)] != values:
+                            errors.append(f"{label}: unexpected {field}; expected {values}")
+                    for field in ("name", "description"):
+                        if not (document.findtext(field) or "").strip():
+                            errors.append(f"{label}: missing {field}")
+                elif relative.startswith("Defs/"):
+                    errors.extend(check_example_definition(document, identity, path.name, label))
+    for missing in sorted(required - found):
+        errors.append(f"{folder}/{missing}: required file missing")
+    return errors, {"packageId": identity, "files": sorted(inventory, key=lambda item: item["path"])}
+
+
 def inspect_packages(repository, include_fingerprints=False):
     """Return validation errors and an optional portable content inventory."""
-    errors = []
-    packages = []
-    for folder, identity, assembly, definitions in PACKAGES:
-        root = repository / folder
-        inventory = []
-        required = {"About/About.xml", f"Assemblies/{assembly}.dll"}
-        required.update(f"Defs/HediffDefs/{name}" for name in definitions)
-        allowed = required | {f"Assemblies/{assembly}.pdb", f"Assemblies/{assembly}.xml"}
-        found = set()
-        if any(path.is_symlink() for path in (root, *root.parents)):
-            errors.append(f"{folder}: symbolic link in package path")
-            continue
-        if not root.is_dir():
-            errors.append(f"{folder}: package directory missing")
-            continue
-        def walk_error(error):
-            raise error
-
-        for current, directories, files in os.walk(root, followlinks=False, onerror=walk_error):
-            for name in list(directories):
-                path = Path(current) / name
-                if path.is_symlink():
-                    errors.append(f"{folder}/{path.relative_to(root)}: symbolic link")
-                    directories.remove(name)
-            for name in files:
-                path = Path(current) / name
-                relative = path.relative_to(root).as_posix()
-                label = f"{folder}/{relative}"
-                if path.is_symlink():
-                    errors.append(f"{label}: symbolic link")
-                    continue
-                if not path.is_file():
-                    errors.append(f"{label}: not a regular file")
-                    continue
-                if relative not in allowed:
-                    errors.append(f"{label}: unexpected file")
-                    continue
-                found.add(relative)
-                if path.stat().st_size == 0:
-                    errors.append(f"{label}: empty file")
-                    continue
-                if include_fingerprints:
-                    inventory.append({"path": relative, **fingerprint(path)})
-                if path.suffix == ".xml":
-                    try:
-                        document = ET.parse(path).getroot()
-                    except (ET.ParseError, OSError) as error:
-                        errors.append(f"{label}: unreadable XML ({error})")
-                        continue
-                    if relative == "About/About.xml":
-                        expected = {
-                            "packageId": [identity],
-                            "supportedVersions/li": ["1.7"],
-                            "author": ["RimWeave Framework"],
-                            "modDependencies/li/packageId": [] if identity == "rimweave.framework" else ["rimweave.framework"],
-                            "loadAfter/li": [] if identity == "rimweave.framework" else ["rimweave.framework"],
-                        }
-                        if document.tag != "ModMetaData":
-                            errors.append(f"{label}: expected ModMetaData root")
-                        for field, values in expected.items():
-                            if [node.text for node in document.findall(field)] != values:
-                                errors.append(f"{label}: unexpected {field}; expected {values}")
-                        for field in ("name", "description"):
-                            if not (document.findtext(field) or "").strip():
-                                errors.append(f"{label}: missing {field}")
-                    elif relative.startswith("Defs/"):
-                        errors.extend(check_example_definition(document, identity, path.name, label))
-        for missing in sorted(required - found):
-            errors.append(f"{folder}/{missing}: required file missing")
+    errors, packages = [], []
+    for package in PACKAGES:
+        found_errors, inventory = inspect_package(repository / package[0], package, include_fingerprints)
+        errors.extend(found_errors)
         if include_fingerprints:
-            packages.append({"packageId": identity, "files": sorted(inventory, key=lambda item: item["path"])})
-    document = {"formatVersion": 1, "validation": "structure-only",
-                "packages": sorted(packages, key=lambda item: item["packageId"])}
-    return errors, document
+            packages.append(inventory)
+    return errors, {"formatVersion": 1, "validation": "structure-only",
+                    "packages": sorted(packages, key=lambda item: item["packageId"])}
 
 
 def main():

@@ -38,6 +38,8 @@ python3 tools/check_packages.py
 
 This checks package structure, not game compatibility or the selected build configuration. Add `--json` to print a portable inventory of file sizes and SHA-256 digests; keep builds and file copies stopped during the check.
 
+Use `python3 tools/verify_package.py inventory.json rimweave.framework /path/to/copied/mod` to compare one copied folder with a previously saved JSON inventory. This reads files without changing the installation.
+
 Copy the complete `mod/` directory into its own folder under RimWorld's `Mods/` directory, then enable **RimWeave Framework** in the game's mod list and restart the game.
 
 The optional developer example is built with the solution. To try it, also copy `examples/RimWeave.Example/` into a separate mod folder and enable **RimWeave Example** after the framework. Use a disposable colony for the example's developer actions.
