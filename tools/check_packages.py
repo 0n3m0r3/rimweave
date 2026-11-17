@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""Read-only structural checks for the three in-repository mod folders."""
+import argparse
+import os
+from pathlib import Path
+import sys
+import xml.etree.ElementTree as ET
+
+PACKAGES = (
+    ("mod", "rimweave.framework", "RimWeave", ()),
+    ("examples/RimWeave.Example", "rimweave.example", "RimWeave.Example",
+     ("CompositionMarker.xml", "ExampleMarker.xml", "ReferenceMarker.xml")),
+    ("examples/RimWeave.Example.Peer", "rimweave.example.peer", "RimWeave.Example.Peer",
+     ("CompositionMarker.xml",)),
+)
+
+
+def check_packages(repository):
+    """Return all structural errors without loading assemblies or changing files."""
+    errors = []
+    for folder, identity, assembly, definitions in PACKAGES:
+        root = repository / folder
+        required = {"About/About.xml", f"Assemblies/{assembly}.dll"}
+        required.update(f"Defs/HediffDefs/{name}" for name in definitions)
+        allowed = required | {f"Assemblies/{assembly}.pdb", f"Assemblies/{assembly}.xml"}
+        found = set()
+        if any(path.is_symlink() for path in (root, *root.parents)):
+            errors.append(f"{folder}: symbolic link in package path")
+            continue
+        if not root.is_dir():
+            errors.append(f"{folder}: package directory missing")
+            continue
+        def walk_error(error):
+            raise error
+
+        for current, directories, files in os.walk(root, followlinks=False, onerror=walk_error):
+            for name in list(directories):
+                path = Path(current) / name
+                if path.is_symlink():
+                    errors.append(f"{folder}/{path.relative_to(root)}: symbolic link")
+                    directories.remove(name)
+            for name in files:
+                path = Path(current) / name
+                relative = path.relative_to(root).as_posix()
+                label = f"{folder}/{relative}"
+                if path.is_symlink():
+                    errors.append(f"{label}: symbolic link")
+                    continue
+                if not path.is_file():
+                    errors.append(f"{label}: not a regular file")
+                    continue
+                if relative not in allowed:
+                    errors.append(f"{label}: unexpected file")
+                    continue
+                found.add(relative)
+                if path.stat().st_size == 0:
+                    errors.append(f"{label}: empty file")
+                    continue
+                if path.suffix == ".xml":
+                    try:
+                        document = ET.parse(path).getroot()
+                    except (ET.ParseError, OSError) as error:
+                        errors.append(f"{label}: unreadable XML ({error})")
+                        continue
+                    if relative == "About/About.xml":
+                        expected = {
+                            "packageId": [identity],
+                            "supportedVersions/li": ["1.7"],
+                            "author": ["RimWeave Framework"],
+                            "modDependencies/li/packageId": [] if identity == "rimweave.framework" else ["rimweave.framework"],
+                            "loadAfter/li": [] if identity == "rimweave.framework" else ["rimweave.framework"],
+                        }
+                        if document.tag != "ModMetaData":
+                            errors.append(f"{label}: expected ModMetaData root")
+                        for field, values in expected.items():
+                            if [node.text for node in document.findall(field)] != values:
+                                errors.append(f"{label}: unexpected {field}; expected {values}")
+                        for field in ("name", "description"):
+                            if not (document.findtext(field) or "").strip():
+                                errors.append(f"{label}: missing {field}")
+                    elif relative.startswith("Defs/") and document.tag != "Defs":
+                        errors.append(f"{label}: expected Defs root")
+        for missing in sorted(required - found):
+            errors.append(f"{folder}/{missing}: required file missing")
+    return errors
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("repository", nargs="?", type=Path, default=Path(__file__).absolute().parent.parent)
+    args = parser.parse_args()
+    try:
+        errors = check_packages(args.repository.absolute())
+    except OSError as error:
+        print(f"Cannot inspect packages: {error}", file=sys.stderr)
+        return 1
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
+        return 1
+    for folder, identity, _, _ in PACKAGES:
+        print(f"Checked {identity}: {folder}")
+    print("Structure only: assembly contents, build configuration and game compatibility are not verified.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

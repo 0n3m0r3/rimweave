@@ -22,6 +22,14 @@ dotnet build RimWeave.sln --configuration Debug
 
 ## Run in RimWorld
 
+After building, check the installable folders:
+
+```bash
+python3 tools/check_packages.py
+```
+
+This checks package structure, not game compatibility or the selected build configuration.
+
 Copy the complete `mod/` directory into its own folder under RimWorld's `Mods/` directory, then enable **RimWeave Framework** in the game's mod list and restart the game.
 
 The optional developer example is built with the solution. To try it, also copy `examples/RimWeave.Example/` into a separate mod folder and enable **RimWeave Example** after the framework. Use a disposable colony for the example's developer actions.
